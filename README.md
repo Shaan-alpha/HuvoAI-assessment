@@ -42,7 +42,7 @@ uvicorn app.main:app --reload
 </details>
 
 ```bash
-uv run pytest tests/ -q                     # 47 deterministic tests, no API key needed
+uv run pytest tests/ -q                     # 48 deterministic tests, no API key needed
 uv run pytest tests/test_scenarios.py -s    # 10 live scenarios, regenerates RESULTS.md
 ```
 
@@ -158,9 +158,11 @@ could not answer is a gap in the fact sheet. Logging them tells the business wha
   Safari; Firefox keeps it behind a flag, and the toggle hides itself where unsupported. The point
   of the toggle is that it flips the *channel* — real telephony would swap the transport, not the
   prompt.
-- **Free-tier rate limits are tight**: 5 requests per minute per model. The client serialises calls
-  behind a 13-second floor, so heavy use queues rather than failing. The full scenario suite takes
-  roughly ten minutes for that reason.
+- **Free-tier quota is tight, and the daily cap binds hardest.** 5 requests per minute per model,
+  but also as few as 20 per *day* on the stronger models — one scenario run exhausts that twice
+  over. Three separate models are used (chat, fallback, analytics) precisely because quota is
+  metered per model, and calls are serialised behind a 13-second floor so heavy use queues rather
+  than failing. A full scenario run takes about six minutes.
 - Analytics is a single pass at conversation end, not incremental slot-filling per turn.
 - No database, authentication, or CRM integration. Out of scope by design.
 
