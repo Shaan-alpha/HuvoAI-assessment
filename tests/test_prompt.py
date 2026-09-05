@@ -43,3 +43,24 @@ def test_deltas_only_change_rendering_not_behaviour():
 def test_unknown_channel_rejected():
     with pytest.raises(ValueError, match="Unknown channel"):
         compose("telepathy")
+
+
+def test_runtime_context_states_todays_date_readably():
+    from datetime import date
+
+    from app.prompt import runtime_context
+
+    text = runtime_context(date(2026, 9, 5))
+    assert "Saturday, 05 September 2026" in text
+    assert "YYYY-MM-DD" in text
+
+
+def test_compose_for_turn_appends_context_to_the_channel_prompt():
+    from datetime import date
+
+    from app.prompt import compose_for_turn
+
+    text = compose_for_turn("voice", date(2026, 9, 5))
+    assert "You are Priya" in text
+    assert "CHANNEL: VOICE" in text
+    assert "CURRENT CONTEXT" in text
