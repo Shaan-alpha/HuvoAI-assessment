@@ -1,0 +1,128 @@
+# Prompt iteration log
+
+How the prompt in [`system_prompt.md`](system_prompt.md) got to its current state. Each revision
+records the **failure actually observed** against the live model, not a change made on a hunch.
+
+Everything here was found by running [`tests/scenarios.py`](../tests/scenarios.py) against
+`gemini-3.8-flash` and reading the transcripts.
+
+---
+
+## v1 — first draft
+
+Written from the assignment brief plus what Huvo's own product page says its agents handle:
+price, configuration, carpet area, location, possession, brochure, offers, callbacks, site visits,
+investment vs end-use, payment plans.
+
+Structure chosen up front:
+
+- A fenced `<facts>` block declared the only source of truth, with an explicit list of what is
+  *not* known. The assignment supplies five facts and forbids inventing anything else, so most
+  realistic buyer questions fall outside them — see the note on this in [`../docs/DESIGN.md`](../docs/DESIGN.md).
+- Language policy separating three cases, not two: English, Hindi in Devanagari, and **romanized
+  Hinglish**. Answering romanized Hindi *in Devanagari* is the standard model failure.
+- Eleven named protocols, one per required behaviour.
+- All behaviour in the core; channel files change only rendering.
+
+**What already worked on first contact.** Voice channel, cold, no priming:
+
+> Hello sir, I am Priya from Northstar Homes, calling regarding your enquiry for Northstar One in
+> Sector 79, Gurugram. Is this a good time to speak for a moment?
+
+Two sentences, no markdown, greets → identifies → asks permission. And the unknown-question
+protocol fired correctly in Hinglish on the first attempt:
+
+> **Customer:** carpet area kitna hai aur possession kab milega?
+> **Priya:** Yeh dono bohot zaroori baatein hain, par exact carpet area aur possession date mere
+> paas abhi confirmed nahi hai. Main hamari sales team se bolkar aapko yeh details share karwa
+> sakti hoon, kya aapka shubh naam jaan sakti hoon?
+
+Acknowledged, declined to guess, offered a route, kept moving. Nothing invented.
+
+---
+
+## v2 — three failures from the first full scenario run
+
+### Failure 1 — greeting instead of answering
+
+Scenario 02 opened with a direct question and got an introduction with no answer in it:
+
+> **Customer:** What's the price for a 2 BHK?
+> **Priya:** Hi there! I'm Priya, a pre-sales consultant at Northstar Homes. I'm here to help you
+> with Northstar One.
+
+The price is one of five facts the agent definitely knows, and it still made the customer ask
+twice. The conversation-flow section said "greet, then understand what they're looking for", and
+the model followed that order literally even when the customer had already told it.
+
+**Change:**
+
+> **Answer the question you were asked, first.** If the customer opens with a direct question,
+> answer it in your first sentence and introduce yourself around that answer — never make them ask
+> twice. A greeting is not a substitute for a reply.
+
+### Failure 2 — turns that advanced nothing
+
+Scenario 01, mid-qualification:
+
+> **Customer:** To live in. Planning to buy in the next 2 months
+> **Priya:** That is a great timeline, and Northstar One in Sector 79, Gurugram would be a
+> wonderful choice for your home.
+
+Warm, agreeable, and completely inert. It asked nothing, proposed nothing, and burned a turn — the
+single most common way a sales conversation dies. "One question per turn" had been read as
+permission to sometimes ask none.
+
+**Change:**
+
+> **Every turn must move forward.** End with a question, a proposal, or a clear next step. Never
+> send a turn that only agrees or compliments. "That's a great timeline" is not a reply; "That's a
+> great timeline — shall we get you a site visit this week?" is.
+
+### Failure 3 — confident, wrong dates
+
+Scenario 01, booking:
+
+> **Priya:** Great! This Saturday, September 7th, works perfectly.
+
+Today was Saturday 5 September 2026. The 7th was a **Monday**. The agent had today's date in its
+context and still produced a weekday and a date that contradicted each other — then carried the
+wrong date into the booking confirmation.
+
+This is not a prompt-wording problem. Models are bad at calendar arithmetic and good at reading a
+table, so the fix was to stop asking it to calculate.
+
+**Change** — `runtime_context()` in [`../app/prompt.py`](../app/prompt.py) now injects a lookup
+table instead of a single date:
+
+```
+The next few days, for booking:
+  Saturday 05 September 2026 = 2026-09-05   (today)
+  Sunday 06 September 2026 = 2026-09-06
+  Monday 07 September 2026 = 2026-09-07
+  ...
+Read the exact date off this table. Do not calculate it yourself, and do not state a
+weekday and a date that disagree with the table.
+```
+
+### Also fixed alongside
+
+Not prompt changes, but found by the same run and worth recording:
+
+- **The fallback model had never worked.** `thinking_level` is a Gemini 3.x parameter;
+  `gemini-2.5-flash` rejects it with `400 INVALID_ARGUMENT`. So whenever the primary hit a rate
+  limit, the fallback 400'd immediately and the customer saw a connection error. `thinking_for()`
+  now selects the parameter by model generation.
+- **The throttle was set for the wrong limit.** The free tier allows **5 requests per minute per
+  model**; the original 4-second floor permitted 15. Raised to 13s, and made per-model so a
+  fallback does not inherit the primary's cooldown.
+- **Thinking tokens were eating replies.** `gemini-3.8-flash` spent 88 thinking tokens to produce
+  a 1-token answer, and returned a completely empty reply under a small output budget. Pinned to
+  `thinking_level=LOW` — `MINIMAL` is rejected by this model.
+
+---
+
+## v3
+
+Pending the second full scenario run. Any further changes will be recorded here with the
+transcript that motivated them.
