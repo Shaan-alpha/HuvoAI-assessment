@@ -37,13 +37,27 @@ def runtime_context(today: Date) -> str:
     the YYYY-MM-DD the booking tool requires, and will either guess a date or
     ask the customer to supply one in a format nobody speaks.
     """
+    from datetime import timedelta
+
+    # Give the model a lookup table rather than asking it to do calendar
+    # arithmetic. Asked to compute, gemini-3.8-flash produced "this Saturday,
+    # September 7th" on a day when the 7th was a Monday. Models are unreliable
+    # at date maths and completely reliable at reading a list.
+    days = [today + timedelta(days=i) for i in range(8)]
+    table = "\n".join(
+        f"  {d:%A %d %B %Y} = {d:%Y-%m-%d}" + ("   (today)" if i == 0 else "")
+        for i, d in enumerate(days)
+    )
     return (
         "# CURRENT CONTEXT\n\n"
-        f"Today is {today:%A, %d %B %Y}.\n"
-        "Use this to resolve relative dates — \"tomorrow\", \"this Saturday\", "
-        "\"next week\" — into an exact YYYY-MM-DD when you call book_site_visit. "
-        "Never ask the customer to say a date in YYYY-MM-DD; convert it yourself. "
-        "Never book a date in the past."
+        f"Today is {today:%A, %d %B %Y}.\n\n"
+        "The next few days, for booking:\n"
+        f"{table}\n\n"
+        "Read the exact date off this table when the customer says \"tomorrow\", "
+        "\"this Saturday\" or similar. Do not calculate it yourself, and do not "
+        "state a weekday and a date that disagree with the table. Never ask the "
+        "customer to say a date in YYYY-MM-DD — convert it yourself before calling "
+        "book_site_visit. Never book a date in the past."
     )
 
 

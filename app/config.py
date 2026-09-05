@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     gemini_model: str = Field(default="gemini-3.8-flash")
     gemini_fallback_model: str = Field(default="gemini-2.5-flash")
 
+    # Analytics runs on a different model deliberately. Free-tier quota is
+    # metered per model, so the end-of-conversation extraction draws on its own
+    # 5 rpm budget instead of competing with the conversation itself. It is also
+    # the cheaper task: structured extraction at temperature 0.
+    gemini_analytics_model: str = Field(default="gemini-2.5-flash-lite")
+
     @field_validator("gemini_api_key")
     @classmethod
     def _require_key(cls, v: str) -> str:

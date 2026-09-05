@@ -81,9 +81,26 @@ def test_run_all_scenarios():
         "",
     ]
 
+    failures: list[str] = []
     for scenario in SCENARIOS:
         print(f"\n=== {scenario.id}: {scenario.title} ===")
-        result = _run(client, scenario)
+        try:
+            result = _run(client, scenario)
+        except Exception as err:
+            # One scenario dying must not throw away nine good transcripts.
+            print(f"  !! FAILED: {str(err)[:200]}")
+            failures.append(f"{scenario.id}: {str(err)[:200]}")
+            lines += [
+                f"## {scenario.id} — {scenario.title}",
+                "",
+                f"**Expected behaviour:** {scenario.expected}",
+                "",
+                f"**Actual output:** run failed — `{str(err)[:300]}`",
+                "",
+                "---",
+                "",
+            ]
+            continue
 
         lines += [
             f"## {scenario.id} — {scenario.title}",
@@ -120,3 +137,4 @@ def test_run_all_scenarios():
     print(f"\nWrote {RESULTS}")
 
     assert len(SCENARIOS) == 10
+    assert not failures, f"{len(failures)} scenario(s) failed to run: {failures}"

@@ -119,6 +119,8 @@ class GeminiClient:
         settings = get_settings()
         self._client = genai.Client(api_key=settings.gemini_api_key)
         self._models = [settings.gemini_model, settings.gemini_fallback_model]
+        # Own quota bucket — see Settings.gemini_analytics_model.
+        self._analytics_models = [settings.gemini_analytics_model, settings.gemini_model]
 
     def chat(self, session: Session, message: str, channel: str) -> str:
         """Send one turn and return the agent's reply.
@@ -169,7 +171,7 @@ class GeminiClient:
         scoring rubric and nothing about JSON shape.
         """
         last_error: Exception | None = None
-        for model in self._models:
+        for model in self._analytics_models:
             for attempt in range(MAX_ATTEMPTS_PER_MODEL):
                 try:
                     _throttle.wait(model)
