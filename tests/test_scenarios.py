@@ -12,6 +12,7 @@ Run with:  uv run pytest tests/test_scenarios.py -v -s
 
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +28,17 @@ pytestmark = pytest.mark.skipif(
 )
 
 RESULTS = Path(__file__).parent / "RESULTS.md"
+
+
+def say(text: str) -> None:
+    """Print without dying on a non-UTF-8 console.
+
+    A Windows console defaults to cp1252, which cannot encode Devanagari — the
+    Hindi scenario killed an entire twelve-minute run on a print statement.
+    The file is always written as UTF-8; only the console echo degrades.
+    """
+    encoding = sys.stdout.encoding or "utf-8"
+    print(text.encode(encoding, errors="replace").decode(encoding))
 
 
 def _run(client: TestClient, scenario) -> dict:
@@ -82,13 +94,26 @@ def test_run_all_scenarios():
     ]
 
     failures: list[str] = []
+    try:
+        _drive(client, lines, failures)
+    finally:
+        # Always write what we have. A twelve-minute run must not be lost to a
+        # failure in its last scenario.
+        RESULTS.write_text("\n".join(lines), encoding="utf-8")
+        say(f"\nWrote {RESULTS}")
+
+    assert len(SCENARIOS) == 10
+    assert not failures, f"{len(failures)} scenario(s) failed to run: {failures}"
+
+
+def _drive(client, lines, failures):
     for scenario in SCENARIOS:
-        print(f"\n=== {scenario.id}: {scenario.title} ===")
+        say(f"\n=== {scenario.id}: {scenario.title} ===")
         try:
             result = _run(client, scenario)
         except Exception as err:
             # One scenario dying must not throw away nine good transcripts.
-            print(f"  !! FAILED: {str(err)[:200]}")
+            say(f"  !! FAILED: {str(err)[:200]}")
             failures.append(f"{scenario.id}: {str(err)[:200]}")
             lines += [
                 f"## {scenario.id} — {scenario.title}",
@@ -115,13 +140,13 @@ def test_run_all_scenarios():
 
         lines += ["**Actual output:**", ""]
         for user, reply in result["exchanges"]:
-            print(f"  YOU  : {user}")
-            print(f"  PRIYA: {reply}")
+            say(f"  YOU  : {user}")
+            say(f"  PRIYA: {reply}")
             lines += [f"> **Customer:** {user}", ">", f"> **Priya:** {reply}", ""]
 
         if result["analytics"]:
             trimmed = _interesting(result["analytics"])
-            print(f"  ANALYTICS: {trimmed}")
+            say(f"  ANALYTICS: {trimmed}")
             lines += [
                 "**Extracted analytics:**",
                 "",
@@ -132,9 +157,3 @@ def test_run_all_scenarios():
             ]
 
         lines += ["---", ""]
-
-    RESULTS.write_text("\n".join(lines), encoding="utf-8")
-    print(f"\nWrote {RESULTS}")
-
-    assert len(SCENARIOS) == 10
-    assert not failures, f"{len(failures)} scenario(s) failed to run: {failures}"
