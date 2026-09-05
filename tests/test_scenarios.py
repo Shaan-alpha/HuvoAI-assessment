@@ -66,14 +66,18 @@ def _run(client: TestClient, scenario) -> dict:
 def _interesting(record: dict) -> dict:
     """Trim the analytics record to the fields worth reading in a report."""
     keep = [
-        "name", "phone", "configuration_interest", "budget_min", "budget_max",
-        "budget_was_stated", "purpose", "timeline", "interest_level",
-        "qualification_score", "site_visit_status", "booking_datetime",
-        "follow_up_required", "callback_time", "objections_raised",
-        "unknown_questions_asked", "do_not_contact", "escalation_requested",
-        "next_action",
+        "name", "phone", "source", "language_preference",
+        "configuration_interest", "budget_min", "budget_max", "budget_was_stated",
+        "purpose", "timeline", "possession_preference", "loan_required",
+        "preferred_location",
+        "interest_level", "qualification_score",
+        "site_visit_status", "booking_datetime",
+        "follow_up_required", "follow_up_reason", "callback_time",
+        "objections_raised", "unknown_questions_asked",
+        "do_not_contact", "escalation_requested",
+        "summary", "next_action",
     ]
-    return {k: record[k] for k in keep if k in record and record[k] not in (None, [], "")}
+    return {k: record[k] for k in keep if k in record and record[k] is not None and record[k] != [] and record[k] != ""}
 
 
 def test_run_all_scenarios():
@@ -102,7 +106,7 @@ def test_run_all_scenarios():
         RESULTS.write_text("\n".join(lines), encoding="utf-8")
         say(f"\nWrote {RESULTS}")
 
-    assert len(SCENARIOS) == 10
+    assert len(SCENARIOS) == 12
     assert not failures, f"{len(failures)} scenario(s) failed to run: {failures}"
 
 
@@ -127,10 +131,18 @@ def _drive(client, lines, failures):
             ]
             continue
 
+        # Input / expected behaviour / actual output, labelled separately and in
+        # that order, because that is the wording the brief asks for.
         lines += [
             f"## {scenario.id} — {scenario.title}",
             "",
             f"**Channel:** `{scenario.channel}`",
+            "",
+            "**Input:**",
+            "",
+        ]
+        lines += [f"{i}. {turn}" for i, turn in enumerate(scenario.turns, 1)]
+        lines += [
             "",
             f"**Expected behaviour:** {scenario.expected}",
             "",

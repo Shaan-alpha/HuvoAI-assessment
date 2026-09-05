@@ -100,6 +100,8 @@ agent stops saying "I'll find out" and offers a human, because by then it reads 
 | **`Don't ever call me again`** | Confirms removal, no rebuttal, no final pitch |
 | **Book `Sunday, 11 am`** | **Booking fails** — see below |
 | `Get me a real person` | Offers a human, confirms who calls and when |
+| `Honestly I'm not interested` | Asks once why, accepts the second refusal, closes warmly |
+| Give name + budget early, then `what's the location again?` | Never re-asks what you volunteered |
 
 ### Reproducing the booking failure
 
@@ -164,6 +166,13 @@ could not answer is a gap in the fact sheet. Logging them tells the business wha
   metered per model, and calls are serialised behind a 13-second floor so heavy use queues rather
   than failing. A full scenario run takes about six minutes.
 - Analytics is a single pass at conversation end, not incremental slot-filling per turn.
+- **Tool calls are not replayed into history.** Only the customer's text and the agent's text are
+  stored per turn; the function-call and function-response parts are not. In practice the agent's
+  own reply carries the outcome forward — scenario 09 recovers correctly from a failed booking on
+  a later turn — and `session.bookings` holds the authoritative record, which is fed to analytics.
+  But an agent making many tool calls across a long conversation would want them persisted.
+- **Sessions are never evicted.** The in-memory store grows for the life of the process. Fine for
+  a demo; a TTL is the first thing to add alongside a real session backend.
 - No database, authentication, or CRM integration. Out of scope by design.
 
 ## AI tools used

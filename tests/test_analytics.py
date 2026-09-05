@@ -61,3 +61,36 @@ def test_budget_stated_flag_is_independent_of_budget_values():
     stated = LeadAnalytics(budget_min=1.35, budget_was_stated=True)
     assert inferred.budget_min == stated.budget_min
     assert inferred.budget_was_stated != stated.budget_was_stated
+
+
+def test_ground_truth_reports_no_booking_attempt():
+    from app.analytics import booking_ground_truth
+
+    assert "never called" in booking_ground_truth(Session(id="g0"))
+
+
+def test_ground_truth_distinguishes_success_from_failure():
+    from app.analytics import booking_ground_truth
+
+    ok = Session(id="g1", bookings=["NS-20260912-3210"])
+    assert "SUCCEEDED" in booking_ground_truth(ok)
+    assert "NS-20260912-3210" in booking_ground_truth(ok)
+
+    bad = Session(id="g2", bookings=["FAILED: 2026-09-13 11:00-12:00"])
+    truth = booking_ground_truth(bad)
+    assert "FAILED" in truth
+    assert "2026-09-13 11:00-12:00" in truth
+    assert "SUCCEEDED" not in truth
+
+
+def test_extraction_prompt_carries_booking_ground_truth():
+    """The tool knows the outcome; the model must not have to guess it."""
+    session = Session(
+        id="g3",
+        turns=[Turn(role="model", content="Your visit is confirmed!")],
+        bookings=["FAILED: 2026-09-13 11:00-12:00"],
+    )
+    client = FakeClient()
+    extract_analytics(client, session)
+    assert "authoritative" in client.seen_instruction
+    assert "FAILED" in client.seen_instruction

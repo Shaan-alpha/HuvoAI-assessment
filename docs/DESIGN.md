@@ -25,7 +25,7 @@ evaluation criteria concern the prompt and the conversation; one concerns whethe
 |---|---|
 | Prompt quality | §5 — layered prompt, fenced fact sheet, channel deltas |
 | Agent behaviour | §5.4 — eleven explicit protocols |
-| Handling customer situations | §8 — ten scenario tests |
+| Handling customer situations | §8 — twelve scenario tests |
 | Conversation context and memory | §6.3 — full-history session store |
 | Whether the bot works | §6 — FastAPI + single-page UI |
 | Code clarity | §6.1 — eight small modules, one job each |
@@ -299,7 +299,7 @@ Two layers, because the assignment's literal ask and good engineering practice w
 **`test_api.py`** — deterministic. LLM mocked. Covers routing, session lifecycle, booking accept
 and reject, analytics shape. Runs in CI with no API key.
 
-**`test_scenarios.py`** — live model, ten scenarios, writes `tests/RESULTS.md` with
+**`test_scenarios.py`** — live model, twelve scenarios, writes `tests/RESULTS.md` with
 **input / expected behaviour / actual output** per the assignment's wording. Committed to the repo
 so a reviewer can read the evidence without running anything or holding a key.
 

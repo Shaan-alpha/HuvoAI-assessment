@@ -86,8 +86,33 @@ next_action is the single concrete thing a salesperson should do next, in under 
 """
 
 
+def booking_ground_truth(session: Session) -> str:
+    """What the booking tool actually did, as opposed to what was said about it.
+
+    The tool records every attempt, so the outcome is known for certain. Asking
+    the model to infer it from the transcript instead would put a guess in the
+    one analytics field a salesperson acts on — and a lead wrongly marked
+    'booked' is a missed appointment nobody chases.
+    """
+    if not session.bookings:
+        return "The booking tool was never called during this conversation."
+    lines = []
+    for entry in session.bookings:
+        if entry.startswith("FAILED:"):
+            lines.append(f"- booking ATTEMPTED AND FAILED for {entry.removeprefix('FAILED:').strip()}")
+        else:
+            lines.append(f"- booking SUCCEEDED, reference {entry}")
+    return "The booking tool recorded these outcomes:\n" + "\n".join(lines)
+
+
 def extract_analytics(client, session: Session) -> LeadAnalytics:
     """Run one extraction pass over the finished transcript."""
     if not session.turns:
         return LeadAnalytics()
-    return client.extract(session.transcript(), LeadAnalytics, EXTRACTION_INSTRUCTION)
+    instruction = (
+        f"{EXTRACTION_INSTRUCTION}\n\n"
+        "SYSTEM RECORD — this is authoritative and overrides anything said in the "
+        "transcript. If it conflicts with what the agent claimed, trust this.\n"
+        f"{booking_ground_truth(session)}"
+    )
+    return client.extract(session.transcript(), LeadAnalytics, instruction)

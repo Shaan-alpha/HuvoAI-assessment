@@ -1,4 +1,4 @@
-"""The ten conversation scenarios the agent is evaluated against.
+"""The twelve conversation scenarios the agent is evaluated against.
 
 Each is a short conversation plus a statement of what correct behaviour looks
 like. `tests/test_scenarios.py` drives them through the real app against the
@@ -8,7 +8,7 @@ Dates are relative to a fixed reference so the expectations stay meaningful:
 2026-09-06 is a Sunday, 2026-09-12 is a Saturday.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -177,5 +177,44 @@ SCENARIOS: list[Scenario] = [
             "confirms the number to call. Analytics must set escalation_requested = true."
         ),
         analytics=True,
+    ),
+    Scenario(
+        id="11-uninterested",
+        title="Uninterested customer",
+        channel="voice",
+        turns=[
+            "Honestly I'm not interested",
+            "No, we've decided to stay where we are",
+        ],
+        expected=(
+            "Asks ONCE, politely, whether it is budget, location or timing — that answer is useful "
+            "to the business. Accepts the second refusal without a third attempt, thanks them and "
+            "closes warmly. Does not pitch again, and does not treat disinterest as an objection "
+            "to be overcome."
+        ),
+        analytics=True,
+        notes="The brief lists 'busy OR uninterested' as one requirement; this is the second half.",
+    ),
+    Scenario(
+        id="12-memory-and-close",
+        title="Conversation memory and proper ending",
+        channel="chat",
+        turns=[
+            "Hi, I'm Rohan Mehta. Looking for a 3 BHK, budget about 2 crore, and I'll need a home loan",
+            "Investment, not to live in. Maybe 6 months out",
+            "What's the location again?",
+            "Alright, let's leave it there for now",
+        ],
+        expected=(
+            "Never re-asks anything already volunteered — not the name, budget, configuration, "
+            "loan requirement, purpose or timeline. Answers the location question from <facts>. "
+            "On the close, summarises what was agreed, confirms the next step and who does it, and "
+            "uses his name. Analytics must capture all six volunteered details."
+        ),
+        analytics=True,
+        notes=(
+            "'Conversation context and memory' is a stated evaluation criterion, and 'proper "
+            "conversation ending' a stated requirement. This exercises both."
+        ),
     ),
 ]

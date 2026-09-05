@@ -173,6 +173,53 @@ Recorded as unverified rather than claimed as fixed.
 
 ---
 
+## v4 — a rule from v2 turned out to block the ending
+
+A full audit against the brief found two requirements with prompt protocols but no scenario
+testing them: *"busy **or uninterested** customers"* — I had tested busy and never uninterested —
+and *"proper conversation ending"*. Adding both immediately exposed a regression **I had
+introduced in v2**.
+
+Scenario 12, on the customer's closing line:
+
+> **Customer:** Alright, let's leave it there for now
+> **Priya:** No problem at all, Rohan. Before we leave it there, **is it the timing or something
+> else that made you want to wait?**
+
+The ENDING protocol says summarise what was agreed and confirm the next step. Instead the agent
+asked another question — because v2's *"Every turn must move forward. End with a question, a
+proposal, or a clear next step"* was doing exactly what it said, on a turn where it should not
+have applied. A fix for inert turns had made the agent unable to gracefully stop.
+
+This is the failure mode of prompt rules that read as universal: they apply universally, including
+where they do harm. The fix is not to weaken the v2 rule — inert turns are still bad — but to name
+its exception.
+
+**Change:**
+
+> **Except when the customer is closing.** "Let's leave it there", "I'll think about it and get
+> back", "that's all for now", "thanks, bye" — these end the conversation. Do not ask another
+> question. Follow the ENDING protocol instead: summarise, confirm the next step, thank them by
+> name. Squeezing in one more question after someone has said goodbye is the single most
+> irritating thing a salesperson does.
+
+Worth noting what v4's scenarios showed working. Memory is solid — given six details in one
+opening line, the agent used his name immediately and again at the close, and never re-asked the
+budget, configuration, loan requirement, purpose or timeline. And the uninterested path was right
+first time:
+
+> **Customer:** Honestly I'm not interested
+> **Priya:** I completely understand. Is it the location, the budget, or the timing that didn't
+> quite fit for you?
+> **Customer:** No, we've decided to stay where we are
+> **Priya:** That makes complete sense, and staying put is often the best choice. Thank you for
+> your time today, and have a wonderful weekend!
+
+Asked once, accepted the second refusal, validated the decision rather than fighting it, closed
+warmly. No third attempt.
+
+---
+
 ## What survived every round
 
 Worth noting what never needed changing, because it says which parts of the design were right
