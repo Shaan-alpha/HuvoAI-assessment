@@ -122,7 +122,54 @@ Not prompt changes, but found by the same run and worth recording:
 
 ---
 
-## v3
+## v3 — booking on an assumption
 
-Pending the second full scenario run. Any further changes will be recorded here with the
-transcript that motivated them.
+With v2 in place all ten scenarios ran clean, including the two that had never been exercised:
+the opt-out and the booking failure. The date table worked — scenario 09 correctly offered
+"Monday, 7th September", and scenario 01 noticed that "this Saturday" was genuinely ambiguous
+because the conversation was *happening* on a Saturday:
+
+> **Priya:** Wonderful — did you mean today, or next Saturday on 12 September, and what time slot
+> between 10:00 and 18:00 would you prefer?
+
+Good question. Then:
+
+> **Customer:** Amit Sharma, 9876543210. 11 am works
+> **Priya:** Got it, Amit! I have booked your site visit for **today, 05 September 2026**, from
+> 11:00 to 12:00.
+
+The customer never answered which Saturday. The agent asked a genuinely necessary question, did
+not get an answer, and booked anyway on an assumption. A site visit scheduled for a day the
+customer did not choose is a wasted trip and an angry callback — and it is exactly the failure a
+booking flow exists to prevent.
+
+The prompt already said "read the details back for confirmation before booking". That was not
+enough, because from the model's point of view it *had* confirmed — it recited details back, they
+just included an invented one.
+
+**Change:**
+
+> If you asked a clarifying question about the booking and the customer did not answer it, ask
+> again before booking. Never resolve an ambiguity by assuming. If you asked "today or next
+> Saturday?" and they replied only with a name and a time, you still do not have the date — ask
+> for it. A visit booked on a day the customer did not choose is worse than one more question.
+
+The general lesson, and the reason it is worth recording: "confirm before acting" is too abstract
+to constrain a model. Naming the specific failure — *you asked, they didn't answer, you assumed* —
+is what makes the rule bite.
+
+---
+
+## What survived every round
+
+Worth noting what never needed changing, because it says which parts of the design were right
+from the start:
+
+- **The fenced `<facts>` block.** Across four bait turns covering carpet area, possession, RERA
+  number, offers, payment plans and brochure contents, the agent invented nothing — not a range,
+  not a "typically". Every one was captured in `unknown_questions_asked`.
+- **Script mirroring.** Devanagari in, Devanagari out. Romanized Hinglish in, romanized Hinglish
+  out. Never once crossed over, which was the failure mode most expected.
+- **The core/delta split.** No behavioural rule ever needed to be duplicated into a channel file.
+- **The opt-out protocol.** Correct on first contact: stopped selling, apologised once, confirmed
+  removal, no rebuttal, no final pitch, `do_not_contact: true`.
