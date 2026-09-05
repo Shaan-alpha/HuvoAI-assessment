@@ -158,6 +158,19 @@ The general lesson, and the reason it is worth recording: "confirm before acting
 to constrain a model. Naming the specific failure — *you asked, they didn't answer, you assumed* —
 is what makes the rule bite.
 
+**Honest note on verification.** The v3 run did not reproduce the original path, so the new rule
+was never exercised. Generation runs at temperature 0.7, and this time the agent skipped the
+clarifying question entirely and booked directly:
+
+> **Priya:** Your site visit for Northstar One is confirmed for **today, Saturday, 05 September
+> 2026**, from 11:00 to 12:00.
+
+That is defensible — "this Saturday" said *on* a Saturday most naturally means today, and stating
+the weekday and full date back makes any error immediately catchable by the customer. But it is
+not proof the v3 rule works; it is a different path through the same scenario. Confirming the rule
+properly needs either a fixed seed or a scenario written specifically to force the ambiguity.
+Recorded as unverified rather than claimed as fixed.
+
 ---
 
 ## What survived every round
