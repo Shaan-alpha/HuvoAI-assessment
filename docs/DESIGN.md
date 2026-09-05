@@ -41,9 +41,11 @@ evaluation criteria concern the prompt and the conversation; one concerns whethe
 
 **Chosen stack** (all verified free, no card)
 
-- **LLM:** Gemini API free tier via Google AI Studio. `gemini-2.5-flash` for conversation
-  (~250 req/day), `gemini-2.5-flash-lite` as fallback (~1000/day). Flash is also the right
-  latency profile for a prompt that must be voice-capable.
+- **LLM:** Gemini API free tier via Google AI Studio. Model is an environment variable, defaulting
+  to `gemini-3.8-flash` (GA 2026-09-02) with `gemini-2.5-flash` as the documented fallback. Flash
+  tier is also the right latency profile for a prompt that must be voice-capable — Huvo advertise
+  a 12-second response time, so latency is a value they hold.
+- **SDK:** `google-genai` — the current package. `google-generativeai` is superseded; do not use it.
 - **Runtime:** Python 3.13, `uv` for dependency management.
 - **Frontend:** one static `index.html`. No build step, no framework.
 
@@ -109,8 +111,9 @@ and only rendering changes.
 4. **Conversation flow** — greet → seek permission to continue → discover → qualify → propose
    site visit → confirm → close.
 5. **Qualification slots** — budget, configuration, timeline, purpose (end-use vs investment),
-   home-loan requirement, current locality. Gathered conversationally, never as an interrogation;
-   at most one question per turn.
+   **possession preference (ready-to-move vs under-construction)**, home-loan requirement,
+   preferred location. Gathered conversationally, never as an interrogation; at most one question
+   per turn. This list mirrors the qualification questions Huvo's own product advertises asking.
 6. **Objection playbook** — eight common objections with a stance for each, not a script.
 7. **Protocols** — §5.4.
 8. **Closing** — how to end well in each of: booked, follow-up, declined, opted-out.
@@ -162,6 +165,12 @@ operates AI calling, so TRAI opt-out handling is their regulatory day job and th
 | Lists | spoken as prose, max 3 items | bullets allowed |
 | Phone numbers | digit by digit | as written |
 | Garbled input | assume mis-transcription, ask to repeat | treat as typo |
+
+Two deltas ship. The point of the architecture, though, is that a third costs one file: Huvo runs
+**WhatsApp, Voice, Email, SMS and CRM** off one agent, and WhatsApp in particular needs its own
+rendering rules (message length, no markdown tables, emoji tolerance). The README will say this
+explicitly — it is the difference between a prompt that happens to work on two channels and one
+designed for a channel-agnostic product.
 
 ### 5.6 Iteration log
 
@@ -226,18 +235,28 @@ One extraction pass over the finished transcript, using a Pydantic model as the 
 schema. Fields:
 
 ```
-name · phone · language_preference
+name · phone · source · language_preference
 budget_min · budget_max · budget_was_stated
-configuration_interest · purpose · timeline · loan_required · current_locality
+configuration_interest · purpose · timeline · possession_preference
+loan_required · preferred_location
 interest_level (hot|warm|cold) · qualification_score (0-100)
 site_visit_status (booked|attempted_failed|declined|not_discussed) · booking_datetime
-follow_up_required · follow_up_reason
+follow_up_required · follow_up_reason · callback_time
 objections_raised[] · unknown_questions_asked[]
 do_not_contact · escalation_requested
-summary
+summary · next_action
 ```
 
-Two deliberate choices:
+The field list deliberately mirrors what Huvo's own product states it captures — *"name, contact,
+source, budget, location, configuration, timeline, intent, site-visit interest, callback time,
+objections, score, summary, and next action"* — plus `do_not_contact` and
+`unknown_questions_asked[]`, which are ours.
+
+`unknown_questions_asked[]` is worth its own line of defence: every question the agent could not
+answer is a gap in the fact sheet. Logging them turns a limitation into a product feedback loop,
+which is the difference between a bot and a deployed system.
+
+Two further deliberate choices:
 
 - **`budget_was_stated` is separate from `budget_min/max`.** A null budget must be distinguishable
   from an inferred one. Without this flag, "not mentioned" and "model guessed" look identical
@@ -257,7 +276,9 @@ of asserting it in a README.
 TTS voice selection uses a client-side heuristic: Devanagari characters present → `hi-IN`,
 otherwise `en-IN`. Deliberately not a model call — it must not add latency to every turn.
 
-Chrome-only. Documented as a known limitation.
+Supported in Chrome, Edge and Safari (all behind the `webkitSpeechRecognition` prefix); Firefox
+keeps it behind a flag. The UI feature-detects and hides the toggle where unsupported rather than
+naming a required browser.
 
 ## 7. Error handling
 
@@ -283,8 +304,13 @@ and reject, analytics shape. Runs in CI with no API key.
 so a reviewer can read the evidence without running anything or holding a key.
 
 Scenarios: happy-path booking · budget objection · pure Hindi · Hinglish code-mix · busy customer ·
-call-me-later · **stop contacting** · **hallucination bait** ("give me 10% discount", "what is the
-RERA number", "when is possession") · **booking failure** · human escalation.
+call-me-later · **stop contacting** · **hallucination bait** · **booking failure** · human escalation.
+
+The hallucination-bait scenario uses the exact question topics Huvo's own site advertises handling
+— **carpet area, possession date, brochure, current offers, payment plans** — plus "give me a 10%
+discount" and "what is the RERA number". None of these are in the five-fact sheet, so every one is
+a hallucination opportunity. These are the questions Huvo knows real buyers ask, which makes them
+the questions a reviewer will try.
 
 The last three carry the most evaluative weight. Hallucination bait tests §4; the stop-contacting
 scenario tests the one behaviour Huvo is regulated on.
