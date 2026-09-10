@@ -372,6 +372,15 @@ instruction and asked the model for the total. That is not reproducible: the mod
 was wrong on three of the four scored scenarios, once across the hot/warm boundary. The rubric is
 now applied in `analytics.score()`, and the model supplies only the judgements that feed it.
 
+**Tool replies are replayed into the instruction (§6.3, §6.4).** The plan stored only the
+customer's text and the agent's text per turn, on the reasoning that a short sales conversation
+needs no more memory than that. It needs a little more. The SDK runs function calling inside one
+`send_message`, so a tool's reply is never stored as a turn, and the agent lost the *reason* for a
+refusal one turn after receiving it — offering a second slot from inside a window it had just been
+told was full. `prompt.booking_context()` replays every attempt and the tool's own reply into the
+system instruction each turn. The full-history claim in §6.3 still holds for the conversation;
+this is the part of the state that was never in the conversation to begin with.
+
 **Booking outcomes are enforced, not merely supplied (§6.5).** The plan fed the tool's record to
 the extraction prompt as authoritative context. That held when a booking had been attempted and
 failed, and did not hold when the tool had never been called at all — the model read a confident

@@ -42,7 +42,7 @@ uvicorn app.main:app --reload
 </details>
 
 ```bash
-uv run pytest tests/ -q                            # 84 deterministic tests, no API key needed
+uv run pytest tests/ -q                            # 88 deterministic tests, no API key needed
 uv run pytest tests/test_scenarios.py -m live -s   # 12 live scenarios, regenerates RESULTS.md
 ```
 
@@ -195,13 +195,18 @@ could not answer is a gap in the fact sheet. Logging them tells the business wha
   but also as few as 20 per *day* on the stronger models — one scenario run exhausts that twice
   over. Three separate models are used (chat, fallback, analytics) precisely because quota is
   metered per model, and calls are serialised behind a 13-second floor so heavy use queues rather
-  than failing. A full scenario run takes about six minutes.
+  than failing. A full scenario run takes about seventeen minutes, nearly all of it spent
+  waiting in that throttle.
 - Analytics is a single pass at conversation end, not incremental slot-filling per turn.
-- **Tool calls are not replayed into history.** Only the customer's text and the agent's text are
-  stored per turn; the function-call and function-response parts are not. In practice the agent's
-  own reply carries the outcome forward — scenario 09 recovers correctly from a failed booking on
-  a later turn — and `session.bookings` holds the authoritative record, which is fed to analytics.
-  But an agent making many tool calls across a long conversation would want them persisted.
+- **Tool calls are not replayed into history as turns.** The SDK runs the function-calling loop
+  inside one `send_message`, so the call and its response are never stored alongside the text.
+  This README used to claim the agent's own reply carried the outcome forward well enough. It
+  does not, and the transcript showed it: told that Sunday 11:00–12:00 was full, the agent said
+  so correctly and then offered 12:00–13:00 on the next turn — inside the same full window, and
+  equally unbookable. Its reply carried the *outcome* forward but not the *constraint* behind it.
+  `prompt.booking_context()` now replays the tool's own replies into the system instruction each
+  turn, so a refusal keeps its reason. An agent making many tool calls over a long conversation
+  would want the parts persisted properly rather than summarised like this.
 - **Sessions are never evicted.** The in-memory store grows for the life of the process. Fine for
   a demo; a TTL is the first thing to add alongside a real session backend.
 - No database, authentication, or CRM integration. Out of scope by design.
@@ -211,6 +216,18 @@ could not answer is a gap in the fact sheet. Logging them tells the business wha
 Claude (Claude Code) was used throughout — for researching the free-tier and SDK constraints,
 drafting the design, writing the implementation, and iterating on the prompt against the scenario
 transcripts. Every design decision, the prompt architecture, and the choices documented above were
-reviewed and directed by me. Two bugs the live runs exposed — the fallback model being
-misconfigured, and the throttle being set for the wrong rate limit — are written up in the commit
-history.
+reviewed and directed by me.
+
+The bugs the live runs exposed are written up where they were found rather than quietly fixed: the
+misconfigured fallback model and the wrong throttle interval in
+[`prompts/ITERATION_LOG.md`](prompts/ITERATION_LOG.md) v2, and a later audit pass — analytics
+recording a booking the tool had never made, the rubric being added up by the model and added up
+wrongly, a lock held across a sleep, and a microphone left open while the agent spoke — in the
+commit history and in v5 and v6 of the same log.
+
+The split is worth noting. The lock and the microphone were found by reading code. Everything
+else — a booking recorded that never happened, three rubric totals that did not add up, an
+invented office hour, an English question answered in Hinglish, a second slot offered from inside
+a window the tool had just refused — was sitting in the committed transcripts, in scenarios that
+had all been marked as passing. That is the argument for committing transcripts and not only
+results.
