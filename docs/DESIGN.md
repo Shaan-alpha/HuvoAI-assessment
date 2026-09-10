@@ -296,15 +296,18 @@ naming a required browser.
 
 Two layers, because the assignment's literal ask and good engineering practice want different things.
 
-**`test_api.py`** — deterministic. LLM mocked. Covers routing, session lifecycle, booking accept
-and reject, analytics shape. Runs in CI with no API key.
+**`test_api.py`** and its siblings — deterministic, LLM mocked, no API key. Routing and session
+lifecycle in `test_api.py`, availability rules in `test_booking.py`, the scoring rubric and the
+booking ground-truth override in `test_analytics.py`, throttling in `test_llm.py`.
 
-**`test_scenarios.py`** — live model, twelve scenarios, writes `tests/RESULTS.md` with
+**`test_scenarios.py`** — live model, twelve scenarios, marked `live` and deselected unless asked
+for, writes `tests/RESULTS.md` with
 **input / expected behaviour / actual output** per the assignment's wording. Committed to the repo
 so a reviewer can read the evidence without running anything or holding a key.
 
 Scenarios: happy-path booking · budget objection · pure Hindi · Hinglish code-mix · busy customer ·
-call-me-later · **stop contacting** · **hallucination bait** · **booking failure** · human escalation.
+call-me-later · **stop contacting** · **hallucination bait** · **booking failure** · human
+escalation · uninterested customer · memory and proper ending.
 
 The hallucination-bait scenario uses the exact question topics Huvo's own site advertises handling
 — **carpet area, possession date, brochure, current offers, payment plans** — plus "give me a 10%
@@ -340,3 +343,38 @@ multi-tenant support · admin dashboard · conversation summarisation
 | Model invents facts under pressure | Fenced fact sheet + unknown protocol + dedicated bait test |
 | Web Speech flaky on camera | Chat mode is the primary demo; voice is a segment, not the spine |
 | Over-building | §10 is a commitment, re-read before adding anything |
+
+
+---
+
+## 12. Amendments
+
+This document was written before the implementation, on 2026-09-05, and is kept as the record of
+what was planned. Four things went differently. They are corrected here rather than edited above,
+so the design and the divergence both stay legible.
+
+**Models (§3).** The plan led with `gemini-3.8-flash` and held `gemini-2.5-flash` in reserve. The
+free tier turned out to be metered per model, with a *daily* cap that binds far harder than the
+per-minute one — as few as 20 requests a day on the stronger models, which one scenario run
+exhausts twice over. The shipped configuration therefore leads with `gemini-3.5-flash-lite`, falls
+back *up* to `gemini-3.8-flash`, and gives the analytics pass its own third bucket
+(`gemini-3.1-flash-lite`) so the end-of-conversation extraction never competes with the
+conversation. `3.5-flash-lite` was also chosen on measured behaviour, not only quota: it answers
+romanized Hinglish in romanized Hinglish, where `3.1-flash-lite` drops into English.
+
+**No rate-limit banner (§7).** The plan promised a banner on 429. What shipped is a 13-second
+per-model throttle that turns a burst into a queue, plus fallback to a second model, plus an
+in-character message if both are exhausted. The user never sees a rate limit as a rate limit,
+which is better than being told about one — so the banner was not built.
+
+**The rubric moved out of the prompt (§6.5).** The plan put the scoring rubric in the extraction
+instruction and asked the model for the total. That is not reproducible: the model's arithmetic
+was wrong on three of the four scored scenarios, once across the hot/warm boundary. The rubric is
+now applied in `analytics.score()`, and the model supplies only the judgements that feed it.
+
+**Booking outcomes are enforced, not merely supplied (§6.5).** The plan fed the tool's record to
+the extraction prompt as authoritative context. That held when a booking had been attempted and
+failed, and did not hold when the tool had never been called at all — the model read a confident
+agent and recorded a booking that did not exist. `site_visit_status` and `booking_datetime` are
+now overwritten from `session.bookings` in code after extraction, so the transcript cannot outvote
+the tool.

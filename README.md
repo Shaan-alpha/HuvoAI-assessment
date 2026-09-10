@@ -42,8 +42,8 @@ uvicorn app.main:app --reload
 </details>
 
 ```bash
-uv run pytest tests/ -q                     # 48 deterministic tests, no API key needed
-uv run pytest tests/test_scenarios.py -s    # 10 live scenarios, regenerates RESULTS.md
+uv run pytest tests/ -q                            # 84 deterministic tests, no API key needed
+uv run pytest tests/test_scenarios.py -m live -s   # 12 live scenarios, regenerates RESULTS.md
 ```
 
 ---
@@ -93,6 +93,7 @@ agent stops saying "I'll find out" and offers a human, because by then it reads 
 |---|---|
 | `bhai 3 BHK ka rate kya hai?` | Replies in romanized Hinglish, **not** Devanagari |
 | `मुझे 2 BHK चाहिए, कीमत क्या है?` | Replies in Devanagari and stays there |
+| `I want to book a site visit` | Replies in plain English — does not slide into Hinglish |
 | `carpet area kitna hai? possession kab?` | Invents nothing; offers a real route to an answer |
 | `Any discount? 10% chalega?` | Declines plainly; never hints a discount is possible |
 | `My budget is 90 lakh` | Says honestly the project starts at Rs 1.35 crore |
@@ -112,6 +113,15 @@ Ask for a Sunday 11 am slot and the agent must state the failure plainly, apolog
 two alternatives — never claim success. Making the failure a real code path rather than something
 the model is told to act out means the recovery conversation is genuine.
 
+The rejection message names the slots that are actually free that day. It used to say only "offer
+two alternatives", and the agent duly offered Sunday 12:00–13:00 — inside the same blocked window,
+so the recovery would have failed a second time. A tool that refuses has to say enough for the
+refusal to be recoverable.
+
+Every rule the prompt states about booking is also enforced here: dates in the past, slots outside
+10:00–18:00, slots that are not one hour on the hour, and impossible clock values are all
+rejected. A rule that lives only in the prompt is a suggestion.
+
 ---
 
 ## Analytics
@@ -121,18 +131,32 @@ list mirrors what a real pre-sales CRM captures — name, contact, source, budge
 configuration, timeline, intent, site-visit interest, callback time, objections, score, summary,
 next action — plus `do_not_contact` and `unknown_questions_asked`.
 
-Three decisions worth explaining:
+Four decisions worth explaining:
 
 **`budget_was_stated` is separate from `budget_min`/`budget_max`.** A budget the customer never
 gave must be distinguishable from one the model inferred. Without the flag, "not mentioned" and
 "guessed" look identical downstream — which is exactly how invented data reaches a CRM and a
 salesperson acts on it.
 
-**`qualification_score` comes from a written rubric**, not from asking the model for a number out
-of ten. The rubric is in [`app/analytics.py`](app/analytics.py): specific points for a stated
-budget at or above the floor, a stated configuration, a timeline inside six months, a booked visit,
-a stated purpose, and a shared phone number. Rubric scores are reproducible and auditable; vibe
-scores are neither.
+**`qualification_score` is computed in code, not asked of the model.** The rubric lives in
+[`app/analytics.py`](app/analytics.py): points for a stated budget at or above the floor, a stated
+configuration, a timeline inside six months, a booked visit, a stated purpose, and a shared phone
+number.
+
+Writing the rubric into the prompt and asking for the total was not enough. Across the scored
+scenarios the model's arithmetic was wrong three times out of four — and on one lead it returned
+65 where the rubric says 70, which is the hot/warm boundary, so the slip changed how a
+salesperson would have prioritised the lead. The model now judges the facts, including the one
+genuinely fuzzy input (`timeline_within_six_months`), and `score()` does the adding.
+`interest_level` is derived from the computed total the same way. That is what makes the score
+reproducible and auditable rather than merely described as such.
+
+**The booking outcome is taken from the tool, never from the transcript.** `site_visit_status`
+and `booking_datetime` are overwritten from `session.bookings` after extraction. This is not
+theoretical: on an earlier run the agent talked as though a visit were settled, never actually
+called the tool, and the extraction recorded `booked` with a date — awarding the 25 rubric points
+that go with it. A lead wrongly marked booked is a missed appointment nobody chases. When the
+tool never ran, the record now says `discussed_not_booked`, which is the true thing.
 
 **`unknown_questions_asked` turns a limitation into a feedback loop.** Every question the agent
 could not answer is a gap in the fact sheet. Logging them tells the business what to add next.
@@ -160,6 +184,13 @@ could not answer is a gap in the fact sheet. Logging them tells the business wha
   Safari; Firefox keeps it behind a flag, and the toggle hides itself where unsupported. The point
   of the toggle is that it flips the *channel* — real telephony would swap the transport, not the
   prompt.
+- **Speech *recognition* is pinned to `en-IN`.** It handles English and romanized Hinglish, which
+  is what most callers speak, but Devanagari-first speakers are transcribed badly. The reply side
+  mirrors whatever script comes out of the recogniser, so the language policy itself is intact —
+  the gap is input only, and a real telephony integration would bring its own ASR anyway.
+- **The booking tool validates but does not hold inventory.** Two customers can book the same slot;
+  there is no ledger behind it beyond the deterministic full window. A real deployment puts a
+  calendar there, and that calendar is what `booking.attempt` is shaped to become.
 - **Free-tier quota is tight, and the daily cap binds hardest.** 5 requests per minute per model,
   but also as few as 20 per *day* on the stronger models — one scenario run exhausts that twice
   over. Three separate models are used (chat, fallback, analytics) precisely because quota is
