@@ -133,6 +133,7 @@ def make_booking_tool(session: Session) -> Callable[[str, str, str, str], str]:
                 date=date.strip(),
                 time_slot=time_slot.strip(),
                 reference=result.reference,
+                message=result.message,
             )
         )
         return result.message
@@ -156,7 +157,7 @@ class GeminiClient:
         comes from our own Session, which stays the source of truth.
         """
         history = to_contents(session)
-        instruction = compose_for_turn(channel, date.today())
+        instruction = compose_for_turn(channel, date.today(), session.bookings)
 
         for model in self._models:
             config = types.GenerateContentConfig(

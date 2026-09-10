@@ -95,3 +95,64 @@ def test_no_channel_delta_leaks_a_behavioural_rule():
         text = _read(delta).lower()
         for behaviour in ("book_site_visit", "<facts>", "discount", "do not contact"):
             assert behaviour not in text, f"{delta} carries behaviour: {behaviour}"
+
+
+def test_no_booking_block_before_any_booking_is_attempted():
+    from datetime import date
+
+    from app.prompt import compose_for_turn
+
+    assert "BOOKINGS ALREADY ATTEMPTED" not in compose_for_turn("chat", date(2026, 9, 10))
+
+
+def test_a_refusal_carries_its_constraint_into_the_next_turn():
+    """The regression: the agent offered a second slot inside the same full window.
+
+    The SDK runs function calling inside one send_message, so the tool's reply is
+    never stored as a turn. The agent saw "Sunday 11:00-12:00 is full", said so,
+    and on the next turn offered 12:00-13:00 — also full, because the whole
+    11:00-13:00 window is. Its own reply carried the outcome forward but not the
+    constraint behind it.
+    """
+    from datetime import date
+
+    from app.booking import attempt
+    from app.prompt import compose_for_turn
+    from app.session import BookingRecord
+
+    result = attempt("A", "9811122233", "2026-09-13", "11:00-12:00", today=date(2026, 9, 10))
+    record = BookingRecord(
+        ok=result.ok, date="2026-09-13", time_slot="11:00-12:00", message=result.message
+    )
+    text = compose_for_turn("chat", date(2026, 9, 10), [record])
+
+    assert "BOOKINGS ALREADY ATTEMPTED" in text
+    assert "2026-09-13 11:00-12:00" in text
+    # the window the tool named, so the agent can avoid all of it
+    assert "11:00 to 13:00" in text
+    # and the slots it said were free
+    assert "10:00-11:00" in text
+    assert "never offer a time inside a window it named as full" in text
+
+
+def test_a_successful_booking_is_replayed_with_its_reference():
+    from datetime import date
+
+    from app.prompt import compose_for_turn
+    from app.session import BookingRecord
+
+    record = BookingRecord(
+        ok=True, date="2026-09-12", time_slot="11:00-12:00",
+        reference="NS-20260912-2233", message="Site visit confirmed.",
+    )
+    text = compose_for_turn("chat", date(2026, 9, 10), [record])
+    assert "ACCEPTED, reference NS-20260912-2233" in text
+
+
+def test_the_agent_is_told_it_cannot_know_availability():
+    """It only ever learns that a slot is taken, never that one is free."""
+    # The prompt is hard-wrapped, so match on the flattened text rather than
+    # letting a line break decide whether the rule is present.
+    flat = " ".join(compose("chat").split())
+    assert "never tell a customer a slot is available" in flat
+    assert "every time inside that window is also full" in flat

@@ -23,6 +23,10 @@ class BookingRecord(BaseModel):
     date: str
     time_slot: str
     reference: str | None = None
+    # The tool's own reply. A refusal carries the constraint that caused it —
+    # which slots are actually free — and that constraint has to survive into
+    # the next turn or the agent offers an unbookable time all over again.
+    message: str = ""
 
     def when(self) -> str:
         return f"{self.date} {self.time_slot}"

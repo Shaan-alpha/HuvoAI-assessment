@@ -61,6 +61,40 @@ def runtime_context(today: Date) -> str:
     )
 
 
-def compose_for_turn(channel: Channel, today: Date) -> str:
+def booking_context(bookings) -> str:
+    """Replay what the booking tool has already said this conversation.
+
+    The SDK runs the function-calling loop inside a single send_message, so the
+    tool's reply is never stored as a turn. The agent therefore sees a refusal
+    once and forgets it: told that Sunday 11:00-12:00 was full, it offered
+    12:00-13:00 on the next turn — inside the same full window, and unbookable.
+
+    Its own reply carries the outcome forward but not the constraint behind it.
+    This block carries the constraint.
+    """
+    if not bookings:
+        return ""
+    lines = []
+    for b in bookings:
+        verdict = f"ACCEPTED, reference {b.reference}" if b.ok else "REFUSED"
+        lines.append(f"  {b.date} {b.time_slot} — {verdict}")
+        if b.message:
+            lines.append(f"    the tool said: {b.message}")
+    return (
+        "# BOOKINGS ALREADY ATTEMPTED IN THIS CONVERSATION\n\n"
+        "You have already called book_site_visit. These are the tool's own replies:\n\n"
+        + "\n".join(lines)
+        + "\n\nEverything the tool told you there still applies. Never offer the customer a "
+        "time it has already refused, and never offer a time inside a window it named as full. "
+        "Beyond what it has told you, you do not know what is free — so never state that a slot "
+        "is available. Propose a time and let the tool confirm it."
+    )
+
+
+def compose_for_turn(channel: Channel, today: Date, bookings=()) -> str:
     """The full system instruction for one live turn."""
-    return f"{compose(channel)}{SEPARATOR}{runtime_context(today)}"
+    parts = [compose(channel), runtime_context(today)]
+    booking_block = booking_context(bookings)
+    if booking_block:
+        parts.append(booking_block)
+    return SEPARATOR.join(parts)
