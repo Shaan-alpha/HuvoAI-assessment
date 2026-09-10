@@ -4,10 +4,11 @@ Drives every scenario through the real app against the live model and writes
 `tests/RESULTS.md` in the form the assignment asks for: input, expected
 behaviour, actual output.
 
-Skipped automatically when GEMINI_API_KEY is absent, so a fresh clone with no
-credentials still runs a green deterministic suite.
+Marked `live` and deselected by default, and skipped outright when no
+GEMINI_API_KEY is present, so a fresh clone runs a green deterministic suite
+either way.
 
-Run with:  uv run pytest tests/test_scenarios.py -v -s
+Run with:  uv run pytest tests/test_scenarios.py -m live -v -s
 """
 
 import json
@@ -83,7 +84,8 @@ def _interesting(record: dict) -> dict:
     keep = [
         "name", "phone", "source", "language_preference",
         "configuration_interest", "budget_min", "budget_max", "budget_was_stated",
-        "purpose", "timeline", "possession_preference", "loan_required",
+        "purpose", "timeline", "timeline_within_six_months",
+        "possession_preference", "loan_required",
         "preferred_location",
         "interest_level", "qualification_score",
         "site_visit_status", "booking_datetime",
@@ -111,7 +113,7 @@ def test_run_all_scenarios():
         "Each scenario shows the **input**, the **expected behaviour**, and the **actual output**.",
         "Analytics records are the real extraction output, trimmed to the populated fields.",
         "",
-        "Reproduce with `uv run pytest tests/test_scenarios.py -v -s`.",
+        "Reproduce with `uv run pytest tests/test_scenarios.py -m live -v -s`.",
         "",
         "---",
         "",

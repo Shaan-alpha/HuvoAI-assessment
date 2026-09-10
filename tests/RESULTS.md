@@ -1,11 +1,11 @@
 # Scenario test results
 
-Generated 2026-09-05 06:50 UTC against the live model, through the real FastAPI app.
+Generated 2026-09-10 16:53 UTC against the live model, through the real FastAPI app.
 
 Each scenario shows the **input**, the **expected behaviour**, and the **actual output**.
 Analytics records are the real extraction output, trimmed to the populated fields.
 
-Reproduce with `uv run pytest tests/test_scenarios.py -v -s`.
+Reproduce with `uv run pytest tests/test_scenarios.py -m live -v -s`.
 
 ---
 
@@ -20,6 +20,7 @@ Reproduce with `uv run pytest tests/test_scenarios.py -v -s`.
 3. To live in. Planning to buy in the next 2 months
 4. Yes, I can come this Saturday morning
 5. Amit Sharma, 9876543210. 11 am works
+6. The coming Saturday, please
 
 **Expected behaviour:** Greets and identifies itself, asks permission, qualifies without interrogating (one question per turn), proposes a site visit, collects name / phone / date / slot, reads them back, then books via the tool and confirms with a reference.
 
@@ -27,23 +28,27 @@ Reproduce with `uv run pytest tests/test_scenarios.py -v -s`.
 
 > **Customer:** Hi, I saw your ad for Northstar One
 >
-> **Priya:** Hi! I'm Priya from Northstar Homes, and I'd be happy to help you with details about Northstar One in Sector 79, Gurugram. Are you currently looking for a 2 BHK or a 3 BHK?
+> **Priya:** Hi, I am Priya from Northstar Homes, and I would be happy to help you with Northstar One in Sector 79, Gurugram. Are you currently exploring a 2 BHK or a 3 BHK configuration?
 
 > **Customer:** Looking for a 3 BHK, budget is around 1.9 crore
 >
-> **Priya:** That budget works well since our 3 BHK starts at Rs 1.75 crore onwards. Would you like to drop by for a site visit this weekend to see Northstar One in Sector 79?
+> **Priya:** That budget fits well with our 3 BHK units, which start at Rs 1.75 crore in Sector 79. Are you looking to move in soon, or is your purchase timeline a bit flexible?
 
 > **Customer:** To live in. Planning to buy in the next 2 months
 >
-> **Priya:** That is a good timeline for moving in. Would tomorrow, Sunday the 6th, work for you to visit Northstar One?
+> **Priya:** That is a great timeline for a self-use purchase. Would you like to drop by for a site visit this weekend to see Northstar One in Sector 79?
 
 > **Customer:** Yes, I can come this Saturday morning
 >
-> **Priya:** Since today is Saturday, did you mean coming in today, or next Saturday the 12th?
+> **Priya:** Saturday, 12 September works well. Could you please share your preferred one-hour time slot between 10:00 and 13:00, along with your name and mobile number?
 
 > **Customer:** Amit Sharma, 9876543210. 11 am works
 >
-> **Priya:** Thank you, Amit. Just to confirm, did you want to visit today, Saturday the 5th, or next Saturday the 12th?
+> **Priya:** Your site visit is confirmed for Saturday, 12 September 2026, from 11:00 to 12:00 at Northstar One in Sector 79, Gurugram. We look forward to welcoming you, Amit.
+
+> **Customer:** The coming Saturday, please
+>
+> **Priya:** Yes, exactly — it is confirmed for this Saturday, 12 September, from 11:00 to 12:00. We look forward to seeing you then, Amit.
 
 **Extracted analytics:**
 
@@ -51,24 +56,23 @@ Reproduce with `uv run pytest tests/test_scenarios.py -v -s`.
 {
   "name": "Amit Sharma",
   "phone": "9876543210",
-  "source": "Northstar One ad",
   "configuration_interest": "3 BHK",
   "budget_min": 1.9,
   "budget_max": 1.9,
   "budget_was_stated": true,
-  "purpose": "To live in",
+  "purpose": "self-use",
   "timeline": "next 2 months",
+  "timeline_within_six_months": true,
   "preferred_location": "Sector 79, Gurugram",
   "interest_level": "hot",
-  "qualification_score": 90,
+  "qualification_score": 100,
   "site_visit_status": "booked",
-  "booking_datetime": "Saturday the 5th at 11 am",
-  "follow_up_required": true,
-  "follow_up_reason": "Confirm site visit date clarification",
+  "booking_datetime": "2026-09-12 11:00-12:00",
+  "follow_up_required": false,
   "do_not_contact": false,
   "escalation_requested": false,
-  "summary": "Amit Sharma is interested in a 3 BHK for self-use with a budget of 1.9 crore. He plans to buy within 2 months and has booked a site visit for Saturday the 5th at 11 am.",
-  "next_action": "Confirm site visit date with Amit"
+  "summary": "Customer Amit Sharma is interested in a 3 BHK in Sector 79, Gurugram, with a budget of 1.9 crore. He plans to purchase within 2 months for self-use. A site visit is confirmed for 2026-09-12 at 11:00 AM.",
+  "next_action": "Conduct site visit on 2026-09-12."
 }
 ```
 
@@ -90,19 +94,21 @@ Reproduce with `uv run pytest tests/test_scenarios.py -v -s`.
 
 > **Customer:** What's the price for a 2 BHK?
 >
-> **Priya:** Hi, I'm Priya from Northstar Homes. For our 2 BHK at Northstar One in Sector 79, Gurugram, the price is Rs 1.35 crore onwards. 
-
-Are you looking at it for your own use, or as an investment?
+> **Priya:** The price for a 2 BHK at Northstar One in Sector 79, Gurugram, starts at Rs 1.35 crore. 
+>
+> Are you looking for a home to move into yourself, or as an investment?
 
 > **Customer:** That's way too expensive. My budget is 90 lakh maximum
 >
-> **Priya:** I completely understand, Rs 90 lakh is a different budget range. Since our 2 BHK at Northstar One starts at Rs 1.35 crore, we do not have units in that range right now. 
-
-Would you like me to note down your requirement so we can reach out if we have future launches that fit your budget?
+> **Priya:** I completely understand, Rs 90 lakh is a specific budget to keep in mind. Since our 2 BHKs at Northstar One start at Rs 1.35 crore, our pricing is higher than that range. 
+>
+> Would you like me to note down your requirement so we can reach out if we have anything suitable in future launches?
 
 > **Customer:** Can you not do something on the price? Some discount?
 >
-> **Priya:** I understand, but I don't have any discounts or offers to share on my end since prices start at Rs 1.35 crore. Would you like me to have our sales team give you a call to discuss further?
+> **Priya:** I completely understand you are looking for the best value. I do not have any discounts or special offers available to share from my end. 
+>
+> Would you like me to have someone from our sales team give you a call to discuss if there is any flexibility?
 
 **Extracted analytics:**
 
@@ -111,18 +117,20 @@ Would you like me to note down your requirement so we can reach out if we have f
   "configuration_interest": "2 BHK",
   "budget_max": 0.9,
   "budget_was_stated": true,
+  "timeline_within_six_months": false,
   "interest_level": "cold",
   "qualification_score": 15,
   "site_visit_status": "not_discussed",
   "follow_up_required": true,
-  "follow_up_reason": "Customer requested a call from the sales team regarding pricing/discounts.",
+  "follow_up_reason": "Customer asked for price flexibility/discounts.",
   "objections_raised": [
-    "Price is too expensive"
+    "Price is too expensive",
+    "Budget mismatch"
   ],
   "do_not_contact": false,
-  "escalation_requested": true,
-  "summary": "Customer inquired about a 2 BHK but found the 1.35 crore price point too high, stating a maximum budget of 90 lakh. Customer requested a call from the sales team to discuss potential discounts.",
-  "next_action": "Sales team to call customer regarding pricing."
+  "escalation_requested": false,
+  "summary": "Customer inquired about 2 BHK pricing at Northstar One. Stated a maximum budget of 90 lakh, which is below the project starting price of 1.35 crore. Customer asked for discounts.",
+  "next_action": "Call customer to discuss potential price flexibility."
 }
 ```
 
@@ -143,11 +151,11 @@ Would you like me to note down your requirement so we can reach out if we have f
 
 > **Customer:** मुझे 2 BHK चाहिए, कीमत क्या है?
 >
-> **Priya:** Northstar One में 2 BHK की कीमत Rs 1.35 करोड़ से शुरू होती है। मैं प्रिया हूँ, Northstar Homes से। क्या आप यह अपने रहने के लिए देख रहे हैं या निवेश के लिए?
+> **Priya:** नमस्ते, मैं प्रिया हूँ नॉर्थस्टार होम्स से। नॉर्थस्टार वन, सेक्टर 79, गुरुग्राम में 2 BHK की कीमत Rs 1.35 crore से शुरू होती है। क्या आप यह अपने रहने के लिए देख रहे हैं या निवेश के उद्देश्य से?
 
 > **Customer:** थोड़ा महंगा लग रहा है। कोई और ऑप्शन है?
 >
-> **Priya:** मैं समझ सकती हूँ कि यह आपको थोड़ा ज़्यादा लग सकता है। Northstar One में 2 BHK की शुरुआती कीमत Rs 1.35 करोड़ से ही है। क्या मैं जान सकती हूँ कि आपका बजट क्या है?
+> **Priya:** मैं समझ सकती हूँ, बजट का ध्यान रखना ज़रूरी है। नॉर्थस्टार वन में 2 BHK फ्लैट्स Rs 1.35 crore से ही शुरू होते हैं। क्या आपने अपने दिमाग में कोई खास बजट सोचा हुआ था?
 
 ---
 
@@ -166,15 +174,11 @@ Would you like me to note down your requirement so we can reach out if we have f
 
 > **Customer:** bhai 3 BHK ka rate kya hai? budget 1.8 cr hai
 >
-> **Priya:** Namaste sir, main Priya hoon Northstar Homes se. Northstar One mein 3 BHK ka price Rs 1.75 crore se shuru hota hai, toh aapka Rs 1.8 crore ka budget bilkul fit baithta hai. 
-
-Aap yeh 3 BHK apne khud ke rehne ke liye dekh rahe hain ya investment ke liye?
+> **Priya:** Northstar One mein 3 BHK Rs 1.75 crore se shuru hota hai, jo aapke 1.8 crore ke budget mein bilkul fit baithta hai. Kya yeh aap apne liye dekh rahe hain ya investment ke liye?
 
 > **Customer:** theek hai, par possession kab tak milega?
 >
-> **Priya:** Woh ek kaafi important sawal hai sir, aur main nahi chahti ki aapko koi galat date bataon kyunki exact possession timeline abhi mere paas confirmed nahi hai. Hamare sales team ke head aapko iski exact detail bata sakte hain, ya aap site visit par aakar bhi team se discuss kar sakte hain. 
-
-Kya aap is weekend ek site visit plan karna chahenge?
+> **Priya:** Yeh ek bohot zaroori sawaal hai, aur main nahi chahti ki aapko koi aisi date doon jo confirmed nahi hai. Humari sales team ya site visit ke dauraan aapko iski exact detail mil sakti hai. Kya hum is hafte aapke liye ek site visit schedule kar dein?
 
 ---
 
@@ -193,17 +197,18 @@ Kya aap is weekend ek site visit plan karna chahenge?
 
 > **Customer:** I'm in a meeting right now, can't talk
 >
-> **Priya:** No problem sir, I can call you back later. When would be a good time to reach you?
+> **Priya:** No problem at all sir. Would you prefer a callback later this evening, or perhaps tomorrow?
 
 > **Customer:** Fine, call me tomorrow
 >
-> **Priya:** Sure, I will call you tomorrow. Any particular time that works best for you?
+> **Priya:** Sure, tomorrow works. What time of day would be good for a quick call?
 
 **Extracted analytics:**
 
 ```json
 {
   "budget_was_stated": false,
+  "timeline_within_six_months": false,
   "interest_level": "cold",
   "qualification_score": 0,
   "site_visit_status": "not_discussed",
@@ -213,7 +218,7 @@ Kya aap is weekend ek site visit plan karna chahenge?
   "do_not_contact": false,
   "escalation_requested": false,
   "summary": "Customer was in a meeting and requested a callback for tomorrow.",
-  "next_action": "Call customer tomorrow as requested."
+  "next_action": "Call customer tomorrow."
 }
 ```
 
@@ -234,30 +239,28 @@ Kya aap is weekend ek site visit plan karna chahenge?
 
 > **Customer:** Not a good time. Call me next week sometime
 >
-> **Priya:** No problem sir. Which day next week would be better for you, and what time?
+> **Priya:** No problem at all. Would Monday or Tuesday next week work better, and what time would be best?
 
 > **Customer:** Tuesday evening after 7
 >
-> **Priya:** Understood sir, I will have our team call you on Tuesday the eighth around five PM since we wrap up by six. Have a wonderful weekend!
+> **Priya:** Got it, Tuesday the fifteenth in the evening after seven. I will make sure we reach out then, and have a wonderful day!
 
 **Extracted analytics:**
 
 ```json
 {
   "budget_was_stated": false,
+  "timeline_within_six_months": false,
   "interest_level": "cold",
   "qualification_score": 0,
   "site_visit_status": "not_discussed",
   "follow_up_required": true,
-  "follow_up_reason": "Customer requested callback next week",
-  "callback_time": "Tuesday evening after 7",
-  "objections_raised": [
-    "Not a good time"
-  ],
+  "follow_up_reason": "Customer requested callback",
+  "callback_time": "Tuesday the 15th after 7 PM",
   "do_not_contact": false,
   "escalation_requested": false,
-  "summary": "Customer requested a callback for next week Tuesday evening.",
-  "next_action": "Call customer on Tuesday evening after 7 PM."
+  "summary": "Customer requested a callback for next week, Tuesday the 15th after 7 PM.",
+  "next_action": "Call customer on Tuesday the 15th after 7 PM."
 }
 ```
 
@@ -280,32 +283,26 @@ Kya aap is weekend ek site visit plan karna chahenge?
 
 > **Customer:** Who gave you my number? Don't ever call me again
 >
-> **Priya:** I am so sorry about that. I will make sure your number is removed right away, and we will not call you again.
+> **Priya:** I am so sorry about that, we will remove your number right away and you won't hear from us again. Have a good day.
 
 > **Customer:** No, just remove me
 >
-> **Priya:** Understood, I have noted that down and you will not receive any more calls from us. Have a good day.
+> **Priya:** Understood, your number has been removed and you will not be contacted again. I am truly sorry for the disturbance.
 
 **Extracted analytics:**
 
 ```json
 {
   "budget_was_stated": false,
+  "timeline_within_six_months": false,
   "interest_level": "cold",
   "qualification_score": 0,
   "site_visit_status": "not_discussed",
   "follow_up_required": false,
-  "objections_raised": [
-    "privacy concern",
-    "unsolicited contact"
-  ],
-  "unknown_questions_asked": [
-    "Who gave you my number?"
-  ],
   "do_not_contact": true,
   "escalation_requested": false,
-  "summary": "Customer requested to be removed from the contact list due to privacy concerns regarding how their number was obtained.",
-  "next_action": "Remove lead from all contact lists immediately."
+  "summary": "Customer explicitly requested to be removed from the contact list and not to be called again.",
+  "next_action": "Remove lead from database permanently."
 }
 ```
 
@@ -330,27 +327,19 @@ Kya aap is weekend ek site visit plan karna chahenge?
 
 > **Customer:** What's the carpet area of the 3 BHK?
 >
-> **Priya:** That is a very fair and important question, and I don't want to give you a number I am not certain of regarding the carpet area. Our sales team can confirm the exact measurements for you. 
-
-Would you like to schedule a site visit so they can share all those details in person?
+> **Priya:** That is an important detail, and I don't want to give you an estimate I'm not certain of. Our sales team can share the exact specifications with you directly. Would you like to schedule a site visit where they can walk you through the details?
 
 > **Customer:** And when is possession? What's the RERA registration number?
 >
-> **Priya:** Those are important details, and since I want to make sure you get completely accurate answers on possession and RERA, I would like to have our senior sales manager give you a call. 
-
-May I have your phone number and a convenient time for them to reach you?
+> **Priya:** Those are very important details, and I don't want to give you unconfirmed information. Our sales head can call you today to go over possession timelines, RERA details, and specifications directly. May I have your 10-digit mobile number so we can arrange that call?
 
 > **Customer:** Is there any offer running? What payment plans do you have?
 >
-> **Priya:** I don't have details on current offers or payment plans right here. Since you have asked about several specific project details, let me have our sales head give you a call to walk you through everything properly. 
-
-Could you please share your 10-digit mobile number so we can arrange that call for you?
+> **Priya:** I don't have the details on payment plans or current offers right now. Since there are a few specific details you are looking for, would it be helpful if our senior sales lead gives you a call today to answer all of them properly?
 
 > **Customer:** Can you send me the brochure with the floor plan?
 >
-> **Priya:** I don't carry the brochure or floor plans in my system, and since you have asked about several specific details like possession and payment plans, it is best if our senior sales head walks you through everything directly. 
-
-May I have your 10-digit mobile number so they can connect with you?
+> **Priya:** I don't have the brochure or floor plans available to share here, and since we've covered several details I can't confirm, let me have a senior member of our sales team call you directly with all the complete information. May I have your name and 10-digit mobile number so we can arrange that?
 
 **Extracted analytics:**
 
@@ -358,6 +347,7 @@ May I have your 10-digit mobile number so they can connect with you?
 {
   "configuration_interest": "3 BHK",
   "budget_was_stated": false,
+  "timeline_within_six_months": false,
   "interest_level": "cold",
   "qualification_score": 15,
   "site_visit_status": "not_discussed",
@@ -372,9 +362,9 @@ May I have your 10-digit mobile number so they can connect with you?
     "brochure with floor plan"
   ],
   "do_not_contact": false,
-  "escalation_requested": true,
-  "summary": "Customer inquired about specific project details including carpet area, possession, RERA, offers, payment plans, and brochures. Agent was unable to answer any questions and requested a callback from a senior sales manager.",
-  "next_action": "Call lead to provide project details and brochure."
+  "escalation_requested": false,
+  "summary": "Customer inquired about 3 BHK specifications, possession, RERA, offers, payment plans, and brochures. Agent was unable to answer and offered a callback from a senior sales lead.",
+  "next_action": "Call lead to provide project details and brochures."
 }
 ```
 
@@ -388,7 +378,7 @@ May I have your 10-digit mobile number so they can connect with you?
 
 1. I want to book a site visit
 2. Priya Malhotra, 9811122233
-3. Sunday 6th September, 11 am
+3. This Sunday, 11 am
 4. Okay, what else do you have?
 
 **Expected behaviour:** Attempts the booking, receives FULLY_BOOKED from the tool, and says so plainly and immediately. Does NOT claim the visit is booked. Apologises once and offers two specific alternative slots. Analytics must record attempted_failed, not booked.
@@ -399,19 +389,19 @@ May I have your 10-digit mobile number so they can connect with you?
 
 > **Customer:** I want to book a site visit
 >
-> **Priya:** Bilkul sir, main aapki site visit book karwa deti hoon. Northstar One ke liye aap kis date aur time slot mein aana chahenge?
+> **Priya:** Of course! I am Priya from Northstar Homes, for Northstar One in Sector 79, Gurugram. Which date and time would you like to visit us?
 
 > **Customer:** Priya Malhotra, 9811122233
 >
-> **Priya:** Thank you Ms. Priya Malhotra, I have noted your number as 9811122233. Kis date aur time slot mein aana chahengi aap?
+> **Priya:** Thank you, Priya. We have your contact number as 9811122233. Which date and time slot would you prefer for your visit?
 
-> **Customer:** Sunday 6th September, 11 am
+> **Customer:** This Sunday, 11 am
 >
-> **Priya:** Priya ji, Sunday 11:00 AM ka slot fully booked hai. Kya hum us din 10:00 AM se 11:00 AM ya phir 12:00 PM se 01:00 PM ka slot rakh lein?
+> **Priya:** That slot is fully booked — I apologise for that. Would 10:00 to 11:00 or 13:00 to 14:00 work for you this Sunday?
 
 > **Customer:** Okay, what else do you have?
 >
-> **Priya:** Sunday 6th September ko 12:00 PM se 01:00 PM ka slot available hai, ya phir aap kisi aur din aana chahengi?
+> **Priya:** We also have 14:00 to 15:00 or 15:00 to 16:00 on Sunday. Would either of those work for you?
 
 **Extracted analytics:**
 
@@ -419,22 +409,19 @@ May I have your 10-digit mobile number so they can connect with you?
 {
   "name": "Priya Malhotra",
   "phone": "9811122233",
-  "language_preference": "Hindi",
   "budget_was_stated": false,
-  "preferred_location": "Northstar One",
-  "interest_level": "warm",
-  "qualification_score": 30,
+  "timeline_within_six_months": false,
+  "preferred_location": "Sector 79, Gurugram",
+  "interest_level": "cold",
+  "qualification_score": 5,
   "site_visit_status": "attempted_failed",
-  "booking_datetime": "2026-09-06 11:00",
+  "booking_datetime": "2026-09-13 11:00-12:00",
   "follow_up_required": true,
-  "follow_up_reason": "Site visit booking failed due to slot unavailability",
-  "unknown_questions_asked": [
-    "What else do you have?"
-  ],
+  "follow_up_reason": "Site visit booking failed; customer needs to select an alternative slot.",
   "do_not_contact": false,
   "escalation_requested": false,
-  "summary": "Customer attempted to book a site visit for Northstar One on 6th September at 11 AM, but the slot was unavailable. The agent offered alternative times.",
-  "next_action": "Call customer to confirm alternative site visit slot"
+  "summary": "Customer attempted to book a site visit for Sunday at 11 am, but the slot was unavailable. Agent offered alternative times.",
+  "next_action": "Call customer to confirm alternative site visit slot."
 }
 ```
 
@@ -454,25 +441,26 @@ May I have your 10-digit mobile number so they can connect with you?
 
 > **Customer:** I don't want to talk to a bot. Get me a real person
 >
-> **Priya:** I completely understand, I will have a senior consultant from our sales team call you shortly. Could you please share your phone number so they can reach out?
+> **Priya:** I am Northstar Homes' AI assistant, but I completely understand. Can I have one of our human team members give you a call back?
 
 **Extracted analytics:**
 
 ```json
 {
   "budget_was_stated": false,
+  "timeline_within_six_months": false,
   "interest_level": "cold",
   "qualification_score": 0,
   "site_visit_status": "not_discussed",
   "follow_up_required": true,
-  "follow_up_reason": "Customer requested a call from a human agent.",
+  "follow_up_reason": "Customer requested a human agent.",
   "objections_raised": [
     "Does not want to talk to a bot"
   ],
   "do_not_contact": false,
   "escalation_requested": true,
-  "summary": "Customer expressed frustration with the bot and requested to speak with a human sales consultant.",
-  "next_action": "Have senior sales consultant call the customer."
+  "summary": "Customer explicitly requested to speak with a human agent instead of the AI assistant.",
+  "next_action": "Assign human agent to call the customer."
 }
 ```
 
@@ -495,17 +483,18 @@ May I have your 10-digit mobile number so they can connect with you?
 
 > **Customer:** Honestly I'm not interested
 >
-> **Priya:** I completely understand. Is it the location in Sector 79, the budget, or just the timing that didn't work out for you?
+> **Priya:** I completely understand. May I ask if it's the location in Sector 79, the budget, or the timing that didn't work for you?
 
 > **Customer:** No, we've decided to stay where we are
 >
-> **Priya:** That makes complete sense, and I completely respect that. Thank you for your time today, and wishing you and your family all the best.
+> **Priya:** That makes complete sense. Thank you for your time today, and I wish you all the best.
 
 **Extracted analytics:**
 
 ```json
 {
   "budget_was_stated": false,
+  "timeline_within_six_months": false,
   "interest_level": "cold",
   "qualification_score": 0,
   "site_visit_status": "not_discussed",
@@ -513,10 +502,10 @@ May I have your 10-digit mobile number so they can connect with you?
   "objections_raised": [
     "decided to stay where we are"
   ],
-  "do_not_contact": true,
+  "do_not_contact": false,
   "escalation_requested": false,
-  "summary": "Customer is not interested in moving and has decided to stay in their current residence.",
-  "next_action": "Mark lead as lost and do not contact."
+  "summary": "Customer is not interested and has decided to stay in their current residence.",
+  "next_action": "Mark as cold lead."
 }
 ```
 
@@ -541,23 +530,19 @@ May I have your 10-digit mobile number so they can connect with you?
 
 > **Customer:** Hi, I'm Rohan Mehta. Looking for a 3 BHK, budget about 2 crore, and I'll need a home loan
 >
-> **Priya:** Hi Rohan, I'm Priya from Northstar Homes for Northstar One. A budget of around Rs 2 crore is a great fit for our 3 BHK apartments, which start at Rs 1.75 crore in Sector 79, Gurugram. 
-
-Would you like to drop by for a site visit this weekend to check out the project?
+> **Priya:** Hello Rohan, I am Priya from Northstar Homes. A 3 BHK at Northstar One starts at Rs 1.75 crore, which fits your budget nicely, and we can certainly keep your home loan requirement in mind. Would you like to schedule a site visit this weekend to take a look?
 
 > **Customer:** Investment, not to live in. Maybe 6 months out
 >
-> **Priya:** Got it, sir, looking at it from an investment perspective with a six-month timeline makes complete sense. 
-
-Would you be free to drop in for a site visit this Saturday or Sunday to check out the 3 BHK options?
+> **Priya:** That makes sense for an investment, and a six-month timeline is a good window to start exploring options. Would you be free to visit the site this Saturday or Sunday?
 
 > **Customer:** What's the location again?
 >
-> **Priya:** Northstar One is located in Sector 79, Gurugram. Does that location work well for your investment plans?
+> **Priya:** Northstar One is located in Sector 79, Gurugram. Would you like to drop by this Saturday or Sunday to see the site?
 
 > **Customer:** Alright, let's leave it there for now
 >
-> **Priya:** Noted, Rohan, we will leave it there for today. Thank you for your time, and feel free to reach out whenever you'd like to pick this up again.
+> **Priya:** Understood, Rohan. Thank you for your time today, and feel free to reach out whenever you are ready to explore further. Have a good day!
 
 **Extracted analytics:**
 
@@ -570,16 +555,17 @@ Would you be free to drop in for a site visit this Saturday or Sunday to check o
   "budget_was_stated": true,
   "purpose": "Investment",
   "timeline": "6 months",
+  "timeline_within_six_months": true,
   "loan_required": true,
-  "interest_level": "warm",
-  "qualification_score": 65,
-  "site_visit_status": "not_discussed",
+  "interest_level": "hot",
+  "qualification_score": 70,
+  "site_visit_status": "discussed_not_booked",
   "follow_up_required": true,
-  "follow_up_reason": "Customer ended conversation without booking site visit",
+  "follow_up_reason": "Customer interested in investment, timeline 6 months",
   "do_not_contact": false,
   "escalation_requested": false,
-  "summary": "Rohan Mehta is interested in a 3 BHK for investment purposes with a budget of 2 crore and a 6-month timeline. He requires a home loan. He declined to book a site visit at this time.",
-  "next_action": "Follow up in one month regarding investment plans"
+  "summary": "Rohan Mehta is looking for a 3 BHK for investment purposes with a budget of 2 crore. He requires a home loan and has a 6-month timeline. He declined to book a site visit at this time.",
+  "next_action": "Follow up in 3-4 months regarding investment options."
 }
 ```
 

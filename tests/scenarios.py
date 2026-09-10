@@ -4,8 +4,14 @@ Each is a short conversation plus a statement of what correct behaviour looks
 like. `tests/test_scenarios.py` drives them through the real app against the
 live model and writes the transcripts to `tests/RESULTS.md`.
 
-Dates are relative to a fixed reference so the expectations stay meaningful:
-2026-09-06 is a Sunday, 2026-09-12 is a Saturday.
+Turns say "this Saturday" and "this Sunday" rather than naming a date. A
+hardcoded date silently changes what a scenario tests as soon as the calendar
+passes it: "Sunday 6th September" was written when it was a week away, and by
+the next run it was in the past, so the booking-failure scenario stopped
+exercising the FULLY_BOOKED window and started exercising the past-date guard
+instead. The agent resolves relative days off the date table in
+`app.prompt.runtime_context`, so the weekday — which is what these scenarios
+actually depend on — stays correct on any run date.
 """
 
 from dataclasses import dataclass
@@ -33,11 +39,12 @@ SCENARIOS: list[Scenario] = [
             "To live in. Planning to buy in the next 2 months",
             "Yes, I can come this Saturday morning",
             "Amit Sharma, 9876543210. 11 am works",
-            # The agent correctly re-asks which Saturday, because the conversation
-            # happens on one. Answering it is what lets the booking complete —
-            # without this turn the scenario ends mid-clarification and the suite
-            # never demonstrates a successful tool call.
-            "Next Saturday the 12th, please",
+            # When the run happens on a Saturday, "this Saturday" is genuinely
+            # ambiguous and the agent re-asks. This turn answers that, so the
+            # booking completes instead of the scenario ending mid-clarification
+            # and never demonstrating a successful tool call. On any other day
+            # the agent has already resolved the date and simply confirms.
+            "The coming Saturday, please",
         ],
         expected=(
             "Greets and identifies itself, asks permission, qualifies without interrogating "
@@ -159,7 +166,8 @@ SCENARIOS: list[Scenario] = [
         turns=[
             "I want to book a site visit",
             "Priya Malhotra, 9811122233",
-            "Sunday 6th September, 11 am",
+            # Any Sunday at 11 am lands in the always-full window.
+            "This Sunday, 11 am",
             "Okay, what else do you have?",
         ],
         expected=(
