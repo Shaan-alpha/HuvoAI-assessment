@@ -1,3 +1,5 @@
+import time
+
 from app.llm import make_booking_tool
 from app.session import Session
 
@@ -5,18 +7,25 @@ from app.session import Session
 def test_booking_tool_records_success_on_session():
     s = Session(id="t1")
     tool = make_booking_tool(s)
-    out = tool("Amit Sharma", "9876543210", "2026-09-12", "11:00-12:00")
+    out = tool("Amit Sharma", "9876543210", "2099-09-12", "11:00-12:00")
     assert "confirmed" in out.lower()
     assert len(s.bookings) == 1
-    assert s.bookings[0].startswith("NS-")
+    assert s.bookings[0].ok
+    assert s.bookings[0].reference.startswith("NS-")
+    assert s.bookings[0].when() == "2099-09-12 11:00-12:00"
 
 
 def test_booking_tool_records_failure_without_reference():
     s = Session(id="t2")
     tool = make_booking_tool(s)
-    out = tool("Amit Sharma", "9876543210", "2026-09-13", "11:00-12:00")
+    # 2099-09-13 is a Sunday, so the documented failure window applies and the
+    # date stays in the future however long this repository lives.
+    out = tool("Amit Sharma", "9876543210", "2099-09-13", "11:00-12:00")
     assert "fully booked" in out.lower()
-    assert s.bookings == ["FAILED: 2026-09-13 11:00-12:00"]
+    assert len(s.bookings) == 1
+    assert s.bookings[0].ok is False
+    assert s.bookings[0].reference is None
+    assert s.bookings[0].when() == "2099-09-13 11:00-12:00"
 
 
 def test_booking_tool_has_a_docstring_for_schema_derivation():
@@ -75,9 +84,53 @@ def test_non_rate_limit_errors_are_not_retried():
 
 
 def test_throttle_is_tracked_per_model():
-    """A fallback model must not inherit the primary's cooldown."""
+    """A fallback model must not inherit the primary's cooldown.
+
+    Timed rather than merely called: without the clock this passes by hanging
+    for the full interval instead of failing, which is the worst way for a
+    concurrency test to be wrong.
+    """
     from app.llm import _Throttle
 
     t = _Throttle(min_interval=99.0)
+    started = time.monotonic()
     t.wait("model-a")
     t.wait("model-b")  # different bucket, must not block
+    assert time.monotonic() - started < 1.0
+
+
+def test_throttle_does_not_hold_its_lock_while_sleeping():
+    """One model's cooldown must not stall every other model.
+
+    Sleeping inside the lock made the wait effectively global: a 13-second
+    cooldown on the primary blocked the fallback and every concurrent request
+    with it, defeating the per-model split entirely.
+    """
+    import threading
+
+    from app.llm import _Throttle
+
+    t = _Throttle(min_interval=2.0)
+    t.wait("slow")  # arms 'slow'; the next wait on it must sleep
+
+    blocked = threading.Thread(target=t.wait, args=("slow",))
+    blocked.start()
+    time.sleep(0.2)  # let it get into its sleep
+
+    started = time.monotonic()
+    t.wait("other")  # a different model must sail straight through
+    elapsed = time.monotonic() - started
+
+    blocked.join()
+    assert elapsed < 0.5, f"a different model waited {elapsed:.2f}s on another model's cooldown"
+
+
+def test_throttle_queues_repeat_calls_to_one_model():
+    """Two calls to the same model are spaced by the interval."""
+    from app.llm import _Throttle
+
+    t = _Throttle(min_interval=0.4)
+    started = time.monotonic()
+    t.wait("same")
+    t.wait("same")
+    assert time.monotonic() - started >= 0.4

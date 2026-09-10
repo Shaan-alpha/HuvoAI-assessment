@@ -11,9 +11,19 @@ from pydantic import BaseModel
 from app import booking
 from app.config import get_settings
 from app.prompt import compose_for_turn
-from app.session import Session
+from app.session import BookingRecord, Session
 
 log = logging.getLogger(__name__)
+
+
+class ExtractionError(RuntimeError):
+    """Every analytics model failed.
+
+    Raised rather than returning an all-defaults record: a zeroed lead is
+    indistinguishable from a real conversation that revealed nothing, and the
+    whole point of this schema is that absence and invention look different.
+    """
+
 
 # The free tier allows 5 requests per minute per model, enforced per project
 # (quota id GenerateRequestsPerMinutePerProjectPerModel-FreeTier). 12s is the
@@ -39,12 +49,21 @@ class _Throttle:
         self._last: dict[str, float] = {}
 
     def wait(self, key: str) -> None:
+        """Reserve this model's next slot, then sleep outside the lock.
+
+        Sleeping while holding the lock would make the wait global rather than
+        per model — a 13-second cooldown on the primary would stall the
+        fallback and every concurrent request with it, which is the exact
+        opposite of what this class exists to do.
+        """
         with self._lock:
-            last = self._last.get(key, 0.0)
-            elapsed = time.monotonic() - last
-            if last and elapsed < self._min_interval:
-                time.sleep(self._min_interval - elapsed)
-            self._last[key] = time.monotonic()
+            now = time.monotonic()
+            last = self._last.get(key)
+            wake = max(now, last + self._min_interval) if last is not None else now
+            self._last[key] = wake
+        delay = wake - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
 
 
 _throttle = _Throttle(MIN_SECONDS_BETWEEN_CALLS)
@@ -103,11 +122,18 @@ def make_booking_tool(session: Session) -> Callable[[str, str, str, str], str]:
             name: The customer's full name.
             phone: The customer's 10-digit Indian mobile number, digits only.
             date: The visit date in YYYY-MM-DD format.
-            time_slot: The one-hour slot as HH:MM-HH:MM, between 10:00 and 18:00.
+            time_slot: A one-hour slot starting on the hour, as HH:MM-HH:MM, between
+                10:00 and 18:00. For example 11:00-12:00. Half-hour starts and
+                longer blocks are rejected.
         """
         result = booking.attempt(name, phone, date, time_slot)
         session.bookings.append(
-            result.reference if result.ok else f"FAILED: {date} {time_slot}"
+            BookingRecord(
+                ok=result.ok,
+                date=date.strip(),
+                time_slot=time_slot.strip(),
+                reference=result.reference,
+            )
         )
         return result.message
 
@@ -198,4 +224,4 @@ class GeminiClient:
                     break
 
         log.error("Extraction failed on every model: %s", last_error)
-        return schema()
+        raise ExtractionError(str(last_error) if last_error else "no model returned a record")

@@ -51,6 +51,32 @@ def test_analytics_on_an_unknown_session_returns_an_empty_record(client):
     assert r.json()["interest_level"] == "unknown"
 
 
+def test_analytics_on_an_unknown_session_does_not_create_one(client):
+    """Otherwise any id mints a session that lives for the whole process.
+
+    Sessions are never evicted, so an endpoint that creates one per arbitrary
+    id is an unbounded-growth path reachable from outside.
+    """
+    from app.main import get_store
+
+    store = client.app.dependency_overrides[get_store]()
+    client.post("/api/analytics/some-made-up-id")
+    assert store.get("some-made-up-id") is None
+
+
+def test_failed_extraction_is_an_error_not_an_empty_lead(client, fake_llm):
+    """A zeroed record renders as a real cold lead scoring nothing.
+
+    The schema exists so absence and invention look different; a silent
+    all-defaults record on failure breaks exactly that.
+    """
+    sid = client.post("/api/chat", json={"message": "Hi"}).json()["session_id"]
+    fake_llm.extraction_fails = True
+    r = client.post(f"/api/analytics/{sid}")
+    assert r.status_code == 503
+    assert "extraction failed" in r.json()["detail"].lower()
+
+
 def test_index_page_is_served(client):
     r = client.get("/")
     assert r.status_code == 200

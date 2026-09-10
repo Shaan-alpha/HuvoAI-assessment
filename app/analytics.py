@@ -5,7 +5,25 @@ from pydantic import BaseModel, Field
 from app.session import Session
 
 InterestLevel = Literal["hot", "warm", "cold", "unknown"]
-SiteVisitStatus = Literal["booked", "attempted_failed", "declined", "not_discussed"]
+SiteVisitStatus = Literal[
+    "booked", "attempted_failed", "declined", "discussed_not_booked", "not_discussed"
+]
+
+# The project's entry price. A budget below this cannot buy here, so it scores
+# nothing however confidently it was stated.
+BUDGET_FLOOR_CRORE = 1.35
+
+POINTS = {
+    "budget_at_or_above_floor": 25,
+    "configuration_stated": 15,
+    "timeline_within_six_months": 20,
+    "site_visit_booked": 25,
+    "purpose_stated": 10,
+    "contact_number_shared": 5,
+}
+
+HOT_AT = 70
+WARM_AT = 40
 
 
 class LeadAnalytics(BaseModel):
@@ -18,6 +36,9 @@ class LeadAnalytics(BaseModel):
     contact, source, budget, location, configuration, timeline, intent,
     site-visit interest, callback time, objections, score, summary and next
     action. do_not_contact and unknown_questions_asked are additions.
+
+    qualification_score and interest_level are NOT filled by the model. It
+    judges the facts; the arithmetic happens in `score`, below.
     """
 
     name: str | None = None
@@ -32,6 +53,7 @@ class LeadAnalytics(BaseModel):
     configuration_interest: str | None = None
     purpose: str | None = None
     timeline: str | None = None
+    timeline_within_six_months: bool = False
     possession_preference: str | None = None
     loan_required: bool | None = None
     preferred_location: str | None = None
@@ -67,20 +89,22 @@ Set budget_was_stated to true only if the customer named a budget themselves.
 
 Budgets are in INR crore, so ninety lakh is 0.9 and one point four crore is 1.4.
 
-Set do_not_contact to true if the customer asked to stop being contacted, in any language.
-Set escalation_requested to true if they asked for a human or a callback from the sales team.
+Set timeline_within_six_months to true only if the customer gave a purchase timeline and it \
+falls inside the next six months. Two months from now is true, maybe next year is false, and \
+saying nothing about timing is false.
+
+Set do_not_contact to true ONLY if the customer explicitly asked to stop being contacted, to \
+be removed, or never to be called again. Losing interest is not an opt-out: not interested, \
+decided to stay where we are, and not buying right now are all cold leads who may be \
+contacted again. Setting this flag wrongly suppresses a real lead permanently.
+
+Set escalation_requested to true only if the CUSTOMER asked for a human or for the sales team \
+to call. The agent offering a callback unprompted is not a request.
+
 List every question the agent could not answer in unknown_questions_asked.
 
-Score qualification_score from 0 to 100 by adding these, and nothing else:
-  budget stated and at or above 1.35 crore .... 25
-  configuration stated ........................ 15
-  timeline within six months .................. 20
-  site visit booked ........................... 25
-  purchase purpose stated ..................... 10
-  contact number shared ....................... 5
-
-Then set interest_level: hot at 70 or above, warm from 40 to 69, cold below 40. \
-If the customer asked not to be contacted, interest_level is cold whatever the score.
+Do not fill in qualification_score or interest_level. They are computed from the fields above \
+by the system, so anything you put there is discarded.
 
 next_action is the single concrete thing a salesperson should do next, in under ten words.\
 """
@@ -95,14 +119,86 @@ def booking_ground_truth(session: Session) -> str:
     'booked' is a missed appointment nobody chases.
     """
     if not session.bookings:
-        return "The booking tool was never called during this conversation."
+        # Stated as a prohibition, not an absence. Told only that the tool was
+        # "never called", the model still reported a booked site visit on the
+        # happy-path scenario, because the agent had talked as though one were
+        # imminent.
+        return (
+            "The booking tool was NEVER CALLED during this conversation. No site visit "
+            "exists. site_visit_status must not be booked and booking_datetime must be "
+            "left empty, no matter how the conversation reads."
+        )
     lines = []
-    for entry in session.bookings:
-        if entry.startswith("FAILED:"):
-            lines.append(f"- booking ATTEMPTED AND FAILED for {entry.removeprefix('FAILED:').strip()}")
+    for record in session.bookings:
+        if record.ok:
+            lines.append(f"- booking SUCCEEDED for {record.when()}, reference {record.reference}")
         else:
-            lines.append(f"- booking SUCCEEDED, reference {entry}")
+            lines.append(f"- booking ATTEMPTED AND FAILED for {record.when()}")
     return "The booking tool recorded these outcomes:\n" + "\n".join(lines)
+
+
+def score(record: LeadAnalytics) -> int:
+    """Apply the rubric in code.
+
+    Asked to add the rubric up itself, the model got it wrong on three of the
+    four scored scenarios — and on one the error crossed the hot/warm boundary,
+    changing how a salesperson would prioritise the lead. The model is good at
+    judging whether a timeline falls inside six months and bad at arithmetic,
+    so it does the judging and this does the adding. That is what makes the
+    score reproducible and auditable rather than merely claimed to be.
+    """
+    ceiling = record.budget_max if record.budget_max is not None else record.budget_min
+    total = 0
+    if record.budget_was_stated and ceiling is not None and ceiling >= BUDGET_FLOOR_CRORE:
+        total += POINTS["budget_at_or_above_floor"]
+    if record.configuration_interest:
+        total += POINTS["configuration_stated"]
+    if record.timeline_within_six_months:
+        total += POINTS["timeline_within_six_months"]
+    if record.site_visit_status == "booked":
+        total += POINTS["site_visit_booked"]
+    if record.purpose:
+        total += POINTS["purpose_stated"]
+    if record.phone:
+        total += POINTS["contact_number_shared"]
+    return total
+
+
+def interest_for(points: int, do_not_contact: bool) -> InterestLevel:
+    """A customer who opted out is cold whatever the rubric says."""
+    if do_not_contact:
+        return "cold"
+    if points >= HOT_AT:
+        return "hot"
+    if points >= WARM_AT:
+        return "warm"
+    return "cold"
+
+
+def apply_booking_truth(record: LeadAnalytics, session: Session) -> LeadAnalytics:
+    """Overwrite the site-visit fields with what the tool actually did."""
+    succeeded = [b for b in session.bookings if b.ok]
+    if succeeded:
+        record.site_visit_status = "booked"
+        record.booking_datetime = succeeded[-1].when()
+    elif session.bookings:
+        record.site_visit_status = "attempted_failed"
+        record.booking_datetime = session.bookings[-1].when()
+    else:
+        record.booking_datetime = None
+        if record.site_visit_status == "booked":
+            # A visit was talked about and never booked. Saying exactly that is
+            # the point; downgrading to 'declined' would be its own invention.
+            record.site_visit_status = "discussed_not_booked"
+    return record
+
+
+def finalise(record: LeadAnalytics, session: Session) -> LeadAnalytics:
+    """Replace every model-guessed derived field with a computed one."""
+    record = apply_booking_truth(record, session)
+    record.qualification_score = score(record)
+    record.interest_level = interest_for(record.qualification_score, record.do_not_contact)
+    return record
 
 
 def extract_analytics(client, session: Session) -> LeadAnalytics:
@@ -115,4 +211,4 @@ def extract_analytics(client, session: Session) -> LeadAnalytics:
         "transcript. If it conflicts with what the agent claimed, trust this.\n"
         f"{booking_ground_truth(session)}"
     )
-    return client.extract(session.transcript(), LeadAnalytics, instruction)
+    return finalise(client.extract(session.transcript(), LeadAnalytics, instruction), session)

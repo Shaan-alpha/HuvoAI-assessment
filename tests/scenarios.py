@@ -33,6 +33,11 @@ SCENARIOS: list[Scenario] = [
             "To live in. Planning to buy in the next 2 months",
             "Yes, I can come this Saturday morning",
             "Amit Sharma, 9876543210. 11 am works",
+            # The agent correctly re-asks which Saturday, because the conversation
+            # happens on one. Answering it is what lets the booking complete —
+            # without this turn the scenario ends mid-clarification and the suite
+            # never demonstrates a successful tool call.
+            "Next Saturday the 12th, please",
         ],
         expected=(
             "Greets and identifies itself, asks permission, qualifies without interrogating "

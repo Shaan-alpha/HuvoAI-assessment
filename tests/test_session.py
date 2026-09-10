@@ -1,4 +1,4 @@
-from app.session import InMemoryStore, Session, Turn
+from app.session import BookingRecord, InMemoryStore, Session, Turn
 
 
 def test_get_or_create_makes_new_session_when_id_is_none():
@@ -40,3 +40,18 @@ def test_transcript_labels_speakers_readably():
     assert s.transcript() == (
         "Customer: 2 BHK ka rate?\nPriya: Rs 1.35 crore onwards, sir."
     )
+
+
+def test_get_returns_none_for_an_unknown_id_without_creating_it():
+    store = InMemoryStore()
+    assert store.get("nope") is None
+    assert store.get("nope") is None
+
+
+def test_booking_records_keep_the_outcome_structured():
+    """A 'FAILED:' string prefix is one typo away from reading as a success."""
+    ok = BookingRecord(ok=True, date="2026-09-12", time_slot="11:00-12:00", reference="NS-1")
+    bad = BookingRecord(ok=False, date="2026-09-13", time_slot="11:00-12:00")
+    assert ok.when() == "2026-09-12 11:00-12:00"
+    assert bad.reference is None
+    assert [b.ok for b in (ok, bad)] == [True, False]

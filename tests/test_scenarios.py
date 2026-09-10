@@ -22,10 +22,11 @@ from fastapi.testclient import TestClient
 from app.main import app
 from tests.scenarios import SCENARIOS
 
-pytestmark = pytest.mark.skipif(
-    not os.getenv("GEMINI_API_KEY") and not Path(".env").exists(),
-    reason="needs a live GEMINI_API_KEY",
-)
+# Marked, not module-skipped. A module-level skip made this suite run whenever
+# a .env happened to exist — turning the documented fast command into a
+# multi-minute live run against a metered quota — while also hiding the
+# deterministic helper tests in this file behind the same condition.
+live = pytest.mark.live
 
 RESULTS = Path(__file__).parent / "RESULTS.md"
 
@@ -39,6 +40,20 @@ def say(text: str) -> None:
     """
     encoding = sys.stdout.encoding or "utf-8"
     print(text.encode(encoding, errors="replace").decode(encoding))
+
+
+def _quote(label: str, text: str) -> list[str]:
+    """Render one speech turn as a markdown blockquote.
+
+    Every line needs its own `>`. Without it a reply containing a blank line —
+    which the chat channel produces whenever it uses a paragraph break — ends
+    the quote early, and the rest of the turn renders as body text in the
+    document a reviewer actually reads.
+    """
+    lines = text.splitlines() or [""]
+    out = [f"> **{label}:** {lines[0]}"]
+    out += [f"> {line}" if line.strip() else ">" for line in lines[1:]]
+    return out
 
 
 def _run(client: TestClient, scenario) -> dict:
@@ -80,6 +95,11 @@ def _interesting(record: dict) -> dict:
     return {k: record[k] for k in keep if k in record and record[k] is not None and record[k] != [] and record[k] != ""}
 
 
+@live
+@pytest.mark.skipif(
+    not os.getenv("GEMINI_API_KEY") and not Path(".env").exists(),
+    reason="needs a live GEMINI_API_KEY",
+)
 def test_run_all_scenarios():
     client = TestClient(app)
     lines: list[str] = [
@@ -154,7 +174,7 @@ def _drive(client, lines, failures):
         for user, reply in result["exchanges"]:
             say(f"  YOU  : {user}")
             say(f"  PRIYA: {reply}")
-            lines += [f"> **Customer:** {user}", ">", f"> **Priya:** {reply}", ""]
+            lines += _quote("Customer", user) + [">"] + _quote("Priya", reply) + [""]
 
         if result["analytics"]:
             trimmed = _interesting(result["analytics"])
@@ -169,3 +189,16 @@ def _drive(client, lines, failures):
             ]
 
         lines += ["---", ""]
+
+
+def test_multi_line_replies_stay_inside_the_blockquote():
+    """The chat channel uses paragraph breaks, and a bare `>` prefix on only
+    the first line drops the rest of the reply out of the quote in the
+    document a reviewer actually reads."""
+    quoted = _quote("Priya", "Rs 1.35 crore onwards.\n\nAre you buying to live in?")
+    assert quoted == [
+        "> **Priya:** Rs 1.35 crore onwards.",
+        ">",
+        "> Are you buying to live in?",
+    ]
+    assert all(line.startswith(">") for line in quoted)

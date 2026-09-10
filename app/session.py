@@ -11,11 +11,27 @@ class Turn(BaseModel):
     content: str
 
 
+class BookingRecord(BaseModel):
+    """What the booking tool actually did, per attempt.
+
+    Structured rather than a formatted string: analytics reads `booking_datetime`
+    straight off this, and a wrongly-formatted prefix can no longer turn a failed
+    booking into a successful-looking one.
+    """
+
+    ok: bool
+    date: str
+    time_slot: str
+    reference: str | None = None
+
+    def when(self) -> str:
+        return f"{self.date} {self.time_slot}"
+
+
 class Session(BaseModel):
     id: str
     turns: list[Turn] = Field(default_factory=list)
-    bookings: list[str] = Field(default_factory=list)
-    channel: str = "chat"
+    bookings: list[BookingRecord] = Field(default_factory=list)
 
     def transcript(self) -> str:
         """Render the conversation for the analytics extraction pass."""
@@ -29,6 +45,8 @@ class SessionStore(Protocol):
     change needed to run more than one worker. Nothing above this interface
     knows where sessions live.
     """
+
+    def get(self, sid: str) -> Session | None: ...
 
     def get_or_create(self, sid: str | None) -> Session: ...
 
@@ -45,6 +63,9 @@ class InMemoryStore:
 
     def __init__(self) -> None:
         self._sessions: dict[str, Session] = {}
+
+    def get(self, sid: str) -> Session | None:
+        return self._sessions.get(sid)
 
     def get_or_create(self, sid: str | None) -> Session:
         if sid is None:

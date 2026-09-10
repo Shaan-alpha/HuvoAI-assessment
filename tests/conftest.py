@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.analytics import LeadAnalytics
+from app.llm import ExtractionError
 from app.main import app, get_llm, get_store
 from app.session import InMemoryStore
 
@@ -12,6 +13,7 @@ class FakeLLM:
     def __init__(self):
         self.last_channel = None
         self.last_message = None
+        self.extraction_fails = False
 
     def chat(self, session, message, channel):
         self.last_channel = channel
@@ -19,6 +21,8 @@ class FakeLLM:
         return f"[{channel}] echo: {message}"
 
     def extract(self, transcript, schema, instruction):
+        if self.extraction_fails:
+            raise ExtractionError("every model refused")
         lines = [ln for ln in transcript.splitlines() if ln.strip()]
         return LeadAnalytics(summary=f"turns={len(lines)}")
 
