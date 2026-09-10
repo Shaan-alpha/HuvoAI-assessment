@@ -137,6 +137,7 @@ const sendBtn = document.getElementById('sendBtn');
 let sessionId = null;
 let voiceMode = false;
 let busy = false;
+let speaking = false;
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const canSpeak = 'speechSynthesis' in window;
@@ -153,18 +154,28 @@ function add(cls, text) {
 
 function isDevanagari(s) { return /[ऀ-ॿ]/.test(s); }
 
+// The microphone must be closed while Priya talks. Left open, the recogniser
+// transcribes the speech engine's own output and posts it back as the next
+// customer turn — the conversation starts talking to itself.
 function speak(text) {
   if (!voiceMode || !canSpeak) return;
+  stopListening();
+  speaking = true;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = isDevanagari(text) ? 'hi-IN' : 'en-IN';
   u.rate = 1.05;
+  u.onend = u.onerror = () => {
+    speaking = false;
+    if (voiceMode) startListening();
+  };
   speechSynthesis.speak(u);
 }
 
 async function send(text) {
   if (busy) return;
   busy = true; sendBtn.disabled = true;
+  stopListening();
   add('user', text);
 
   const dots = document.createElement('div');
@@ -194,6 +205,9 @@ async function send(text) {
     add('sys', 'Could not reach the agent — ' + e.message);
   } finally {
     busy = false; sendBtn.disabled = false; input.focus();
+    // speak() reopens the microphone when the reply finishes playing. Only
+    // reopen it here if nothing is going to be spoken.
+    if (voiceMode && !speaking) startListening();
   }
 }
 
@@ -220,13 +234,13 @@ voiceBtn.addEventListener('click', () => {
   add('sys', voiceMode
     ? 'Voice mode on — the agent now uses the voice channel prompt.'
     : 'Voice mode off — back to the chat channel prompt.');
-  if (!voiceMode) { speechSynthesis.cancel(); stopListening(); }
+  if (!voiceMode) { if (canSpeak) speechSynthesis.cancel(); speaking = false; stopListening(); }
   else startListening();
 });
 
 let recogniser = null;
 function startListening() {
-  if (!SR) return;
+  if (!SR || recogniser || speaking || busy) return;
   recogniser = new SR();
   recogniser.lang = 'en-IN';
   recogniser.interimResults = false;
@@ -235,11 +249,19 @@ function startListening() {
     const said = e.results[0][0].transcript.trim();
     if (said) send(said);
   };
-  recogniser.onend = () => { if (voiceMode) { try { recogniser.start(); } catch (_) {} } };
-  try { recogniser.start(); } catch (_) {}
+  recogniser.onend = () => {
+    recogniser = null;
+    if (voiceMode && !speaking && !busy) startListening();
+  };
+  try { recogniser.start(); } catch (_) { recogniser = null; }
 }
 function stopListening() {
-  if (recogniser) { recogniser.onend = null; recogniser.stop(); recogniser = null; }
+  if (recogniser) {
+    const r = recogniser;
+    recogniser = null;
+    r.onend = null; r.onresult = null;
+    try { r.stop(); } catch (_) {}
+  }
 }
 
 document.getElementById('resetBtn').addEventListener('click', async () => {
@@ -248,10 +270,24 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
   log.innerHTML = '';
   document.getElementById('analytics').innerHTML =
     '<p class="empty">Have a conversation, then choose <b>End &amp; analyse</b> to extract the lead record.</p>';
-  speechSynthesis.cancel();
+  if (canSpeak) speechSynthesis.cancel();
+  speaking = false;
 });
 
-const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+// The site-visit field is the one a salesperson acts on, so it says exactly
+// what happened. 'discussed_not_booked' means the agent talked about a visit
+// and the booking tool was never called — deliberately distinct from a
+// customer who declined one.
+const VISIT_LABELS = {
+  booked: 'Booked',
+  attempted_failed: 'Attempted — slot unavailable',
+  declined: 'Declined',
+  discussed_not_booked: 'Discussed, not booked',
+  not_discussed: 'Not discussed',
+};
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const show = (v) => (v === null || v === undefined || v === '' ? '&mdash;' : esc(v));
 
 document.getElementById('analyseBtn').addEventListener('click', async () => {
@@ -261,9 +297,14 @@ document.getElementById('analyseBtn').addEventListener('click', async () => {
   try {
     const res = await fetch('/api/analytics/' + sessionId, { method: 'POST' });
     const a = await res.json();
-    const budget = a.budget_was_stated && (a.budget_min || a.budget_max)
-      ? [a.budget_min, a.budget_max].filter(Boolean).join('–') + ' cr'
-      : (a.budget_min || a.budget_max ? 'inferred, not stated' : null);
+    // A 503 means every extraction model failed. Rendering the zeroed record
+    // would show that failure as a genuine cold lead scoring nothing.
+    if (!res.ok) throw new Error(a.detail || ('HTTP ' + res.status));
+    // A budget the customer never gave must never render as one they did.
+    const bounds = [...new Set([a.budget_min, a.budget_max].filter((v) => v != null))];
+    const budget = bounds.length && a.budget_was_stated
+      ? bounds.join('–') + ' cr'
+      : (bounds.length ? 'inferred, not stated' : null);
 
     box.innerHTML = `
       <div class="score">
@@ -284,7 +325,7 @@ document.getElementById('analyseBtn').addEventListener('click', async () => {
         <div><dt>Home loan</dt><dd>${a.loan_required === null ? '&mdash;' : (a.loan_required ? 'Yes' : 'No')}</dd></div>
         <div><dt>Location</dt><dd>${show(a.preferred_location)}</dd></div>
         <div><dt>Language</dt><dd>${show(a.language_preference)}</dd></div>
-        <div><dt>Site visit</dt><dd>${show(a.site_visit_status)}</dd></div>
+        <div><dt>Site visit</dt><dd>${show(VISIT_LABELS[a.site_visit_status] || a.site_visit_status)}</dd></div>
         <div><dt>Booked for</dt><dd>${show(a.booking_datetime)}</dd></div>
         <div><dt>Follow-up</dt><dd>${a.follow_up_required ? 'Yes' : 'No'}</dd></div>
         <div><dt>Callback</dt><dd>${show(a.callback_time)}</dd></div>
